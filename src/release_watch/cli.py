@@ -74,7 +74,8 @@ def discover(relabel: bool = typer.Option(False, help="Re-label every candidate,
         counts = {"sync": await _sync(settings, session_factory)}
         async with make_docextractor_client(settings) as client:
             with session_factory() as s:
-                counts["proposals"] = upsert_proposals(s, await propose_candidates(client, s))
+                proposals, counts["toc_errors"] = await propose_candidates(client, s)
+                counts["proposals"] = upsert_proposals(s, proposals)
         async with make_fetcher(settings) as fetcher:
             counts["labels"] = await label_pending(session_factory, fetcher, make_llm(settings), relabel=relabel)
         return counts

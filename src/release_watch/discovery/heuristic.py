@@ -1,5 +1,10 @@
-"""Propose release-notes candidates from DocExtractor's catalog (briefing: "Finding release-notes pages")."""
+"""Propose release-notes candidates from DocExtractor's catalog (briefing: "Finding release-notes pages").
 
+DocExtractor's full-text search is not used: it takes ~100 s per page and shares a database with the crawler.
+Matching TOC titles *and* URLs finds the same pages, since search hits matching only in the body are noise.
+"""
+
+import logging
 import re
 import uuid
 from dataclasses import dataclass
@@ -8,14 +13,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from release_watch.models import CatalogProduct, CatalogSource, CatalogVendor, WatchedSource
+from release_watch.docextractor import DocExtractorError
 from release_watch.urls import normalize_url
+
+log = logging.getLogger(__name__)
 
 RELEASE_PATTERN = re.compile(
     r"release[ _-]?notes?|what'?s[ _-]?new|new[ _-]features|change[ _-]?log|revision[ _-]history|readme"
     r"|product[ _-]updates",
     re.IGNORECASE,
 )
-SEARCH_QUERIES = ("release notes", "what's new", "changelog")
 
 
 @dataclass
@@ -59,14 +66,25 @@ def _first_url(entry: dict) -> str | None:
 def _toc_matches(entries: list[dict]):
     """Matching TOC entries; a matching branch is returned once and its children are not searched."""
     for entry in entries:
-        if RELEASE_PATTERN.search(entry.get("title") or ""):
+        if RELEASE_PATTERN.search(entry.get("title") or "") or RELEASE_PATTERN.search(entry.get("url") or ""):
             yield entry
         else:
             yield from _toc_matches(entry.get("children") or [])
 
 
-async def propose_candidates(client, session: Session) -> list[Proposal]:
+async def _toc(client, source_id: str, errors: list[str]) -> list[dict]:
+    try:
+        return await client.get_toc(source_id)
+    except DocExtractorError as exc:
+        log.warning("toc skipped for source %s: %s", source_id, exc)
+        errors.append(source_id)
+        return []
+
+
+async def propose_candidates(client, session: Session) -> tuple[list[Proposal], int]:
+    """Proposals, plus how many sources were skipped because their TOC couldn't be read."""
     sources = _watchable_sources(session)
+    toc_errors: list[str] = []
     proposals: dict[str, Proposal] = {}
     covered: set[str] = set()
 
@@ -81,16 +99,16 @@ async def propose_candidates(client, session: Session) -> list[Proposal]:
             continue
         kind = "index_page" if src.source_type == "pdf" else "entry_page"
         if src.source_type == "web":
-            toc = await client.get_toc(sid)
+            toc = await _toc(client, sid, toc_errors)
             if sum(1 for e in _walk(toc) if e.get("url")) > 1:
                 kind = "index_page"
         add(Proposal(vendor, str(prod.de_id), sid, None, src.base_url, src.name, kind, "source_name"))
 
-    # Pass 2: TOC branches or pages named like release notes inside other web sources.
+    # Pass 2: TOC branches or pages whose title or URL says release notes, inside other web sources.
     for sid, (src, prod, vendor) in sources.items():
         if sid in covered or src.source_type != "web":
             continue
-        for entry in _toc_matches(await client.get_toc(sid)):
+        for entry in _toc_matches(await _toc(client, sid, toc_errors)):
             url = _first_url(entry)
             if not url:
                 continue
@@ -100,20 +118,7 @@ async def propose_candidates(client, session: Session) -> list[Proposal]:
                 add(Proposal(vendor, str(prod.de_id), sid, entry.get("article_id"), url, entry["title"],
                              "entry_page", "toc"))
 
-    # Pass 3: full-text search; keep only hits whose title or URL says release notes.
-    for q in SEARCH_QUERIES:
-        async for hit in client.search_articles(q):
-            sid = str(hit.get("source_id"))
-            if sid not in sources or sid in covered:
-                continue
-            if not (RELEASE_PATTERN.search(hit.get("title") or "")
-                    or RELEASE_PATTERN.search(hit.get("source_url") or "")):
-                continue
-            src, prod, vendor = sources[sid]
-            proposals.setdefault(normalize_url(hit["source_url"]), Proposal(
-                vendor, str(prod.de_id), sid, str(hit["id"]), hit["source_url"], hit.get("title"),
-                "entry_page", "search"))
-    return list(proposals.values())
+    return list(proposals.values()), len(toc_errors)
 
 
 def upsert_proposals(session: Session, proposals: list[Proposal]) -> dict[str, int]:

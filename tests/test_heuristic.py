@@ -34,12 +34,8 @@ async def propose(session_factory, fake):
 
 
 async def test_source_name_match_proposes_source_once(session_factory):
-    fake = FakeDocExtractor(
-        tocs={ZERTO_RN: [toc_entry("Release Notes for 10.8", "https://help.zerto.com/rn/10.8")]},
-        search={"release notes": [{"id": str(uuid.uuid4()), "source_id": ZERTO_RN, "title": "Release Notes 10.7",
-                                   "source_url": "https://help.zerto.com/rn/10.7"}]},
-    )
-    proposals = await propose(session_factory, fake)
+    fake = FakeDocExtractor(tocs={ZERTO_RN: [toc_entry("Release Notes for 10.8", "https://help.zerto.com/rn/10.8")]})
+    proposals, _ = await propose(session_factory, fake)
     zerto = [p for p in proposals if p.de_source_id == ZERTO_RN]
     assert len(zerto) == 1
     assert zerto[0].reason == "source_name"
@@ -52,43 +48,40 @@ async def test_toc_branch_collapses_children(session_factory):
         toc_entry("Installing", "https://help.zerto.com/admin/install"),
         toc_entry("Release Notes", None, children),
     ]})
-    proposals = [p for p in await propose(session_factory, fake) if p.de_source_id == ZERTO_ADMIN]
+    proposals = [p for p in (await propose(session_factory, fake))[0] if p.de_source_id == ZERTO_ADMIN]
     assert len(proposals) == 1
     assert proposals[0].kind_hint == "index_page"
     assert proposals[0].url == "https://help.zerto.com/admin/rn/10.0"
     assert proposals[0].reason == "toc"
 
 
-async def test_search_body_only_hit_dropped(session_factory):
-    fake = FakeDocExtractor(search={"release notes": [
-        {"id": str(uuid.uuid4()), "source_id": KASTEN, "title": "Configuring backups",
-         "source_url": "https://docs.kasten.io/latest/config"},
-    ]})
-    proposals = await propose(session_factory, fake)
-    assert not [p for p in proposals if p.de_source_id == KASTEN]
-
-
-async def test_search_title_hit_proposed(session_factory):
+async def test_toc_url_match_proposed(session_factory):
     article = str(uuid.uuid4())
-    fake = FakeDocExtractor(search={"what's new": [
-        {"id": article, "source_id": KASTEN, "title": "What's New in 8.0",
-         "source_url": "https://docs.kasten.io/latest/releasenotes"},
+    fake = FakeDocExtractor(tocs={KASTEN: [
+        toc_entry("Install", "https://docs.kasten.io/latest/install"),
+        toc_entry("8.0", "https://docs.kasten.io/latest/releasenotes/8.0", article_id=article),
     ]})
-    proposals = [p for p in await propose(session_factory, fake) if p.de_source_id == KASTEN]
+    proposals = [p for p in (await propose(session_factory, fake))[0] if p.de_source_id == KASTEN]
     assert len(proposals) == 1
-    assert proposals[0].reason == "search"
-    assert proposals[0].de_article_id == article
-    assert proposals[0].vendor_name == "Veeam"
+    assert (proposals[0].reason, proposals[0].de_article_id, proposals[0].vendor_name) == ("toc", article, "Veeam")
+
+
+async def test_toc_error_skips_source_and_counts(session_factory):
+    fake = FakeDocExtractor(tocs={ZERTO_ADMIN: [toc_entry("Release Notes", "https://help.zerto.com/admin/rn")]},
+                            toc_fail={KASTEN})
+    proposals, toc_errors = await propose(session_factory, fake)
+    assert toc_errors == 1
+    assert [p.de_source_id for p in proposals if p.reason == "toc"] == [ZERTO_ADMIN]
 
 
 async def test_excluded_product_skipped(session_factory):
-    proposals = await propose(session_factory, FakeDocExtractor())
+    proposals, _ = await propose(session_factory, FakeDocExtractor())
     assert not [p for p in proposals if p.de_source_id == VEEAM_ONE_RN]
 
 
 def _proposal(url, article=None, source=ZERTO_RN):
     return Proposal(vendor_name="Zerto", product_de_id=ZERTO_PRODUCT, de_source_id=source,
-                    de_article_id=article, url=url, title="RN", kind_hint="entry_page", reason="search")
+                    de_article_id=article, url=url, title="RN", kind_hint="entry_page", reason="toc")
 
 
 async def test_upsert_moved_article_updates_url(session_factory):
@@ -121,7 +114,7 @@ async def test_upsert_new_row_is_candidate(session_factory):
         counts = upsert_proposals(s, [_proposal("https://x.com/rn")])
         row = s.scalars(select(WatchedSource)).one()
     assert counts["new"] == 1
-    assert (row.state, row.origin, row.kind, row.discovery_reason) == ("candidate", "heuristic", "entry_page", "search")
+    assert (row.state, row.origin, row.kind, row.discovery_reason) == ("candidate", "heuristic", "entry_page", "toc")
 
 
 async def test_login_walled_flagged(session_factory):

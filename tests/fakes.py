@@ -10,10 +10,10 @@ FIXTURES = Path(__file__).parent / "fixtures"
 class FakeDocExtractor:
     """Duck-typed stand-in for DocExtractorClient, backed by a fixture dict."""
 
-    def __init__(self, catalog: dict | None = None, *, tocs=None, search=None, fail_on=None):
+    def __init__(self, catalog: dict | None = None, *, tocs=None, fail_on=None, toc_fail=()):
         self.catalog = copy.deepcopy(catalog or json.loads((FIXTURES / "catalog_small.json").read_text()))
         self.tocs = tocs or {}
-        self.search = search or {}
+        self.toc_fail = set(toc_fail)
         self.fail_on = fail_on
 
     async def __aenter__(self):
@@ -40,8 +40,7 @@ class FakeDocExtractor:
         return self.catalog["sources"]
 
     async def get_toc(self, source_id):
+        if str(source_id) in self.toc_fail:
+            from release_watch.docextractor import DocExtractorError
+            raise DocExtractorError(f"GET /articles/toc/{source_id}: ReadTimeout")
         return self.tocs.get(str(source_id), [])
-
-    async def search_articles(self, q, source_id=None):
-        for item in self.search.get(q, []):
-            yield item
