@@ -62,7 +62,7 @@ In the owner's order of harm:
 | **Rubrik, Cohesity** (login) | **Never logged in to.** The owner wants to keep logins to these accounts rare. Covered only through public sources: blog, press releases, public PDFs, public release-notes pages if any. Listed in the health section as "public sources only" |
 | The 12 vendors with no release notes in DocExtractor (AWS, CloudAlly, Eon, Flosum, Gearset, Google, Nakivo, Red Hat, Salesforce, Slide, Synology, Velero) | Sources found by hand research during discovery: GitHub releases for Velero, plus vendor changelogs, "what's new" pages, blogs and RSS feeds |
 | Veeam core products | Out of scope |
-| Veeam Kasten, Securiti.ai, Veeam Data Cloud | Watched like any public vendor. VDC's changelog is hand-added. Securiti has one login-walled source in DocExtractor; with no credentials given, it is covered by public sources only |
+| Veeam Kasten, Securiti.ai, Veeam Data Cloud | Watched like any public vendor. VDC's changelog is hand-added. Securiti.ai's release notes (about 30 pages) sit behind the helpcenter.securiti.ai login. **The owner approved a daily login for Securiti.ai in Phase 2**, like AvePoint and Eon (decided 2026-11-03) |
 
 Vendor credentials are entered by the owner as Kubernetes Secrets. Whose accounts they are is the owner's business; the code just reads a secret per vendor.
 
@@ -226,7 +226,7 @@ DocExtractor ids are plain references, never cross-stack foreign keys.
   - CronJobs: `sync` daily 05:00, `discover` Mondays 05:30, `watch` daily 06:00 (monitor 1, then monitor 2), `digest` daily 08:00.
   - `postgres` StatefulSet with a 1 GiB PVC.
 - Each CronJob writes a `job_run` row and has `concurrencyPolicy: Forbid`.
-- Secrets: the DocExtractor key, the webhook URL, the Azure OpenAI key and endpoint, the OpenRouter key, and AvePoint and Eon credentials.
+- Secrets: the DocExtractor key, the webhook URL, the Azure OpenAI key and endpoint, the OpenRouter key, and AvePoint, Eon and Securiti.ai credentials.
 - **Web view access:** LAN-only behind the ingress, no login (builder's call; it's a homelab service).
 - **LLM:** **Azure OpenAI `gpt-5-mini`** is the primary model for summaries, classification and validation. A cheap OpenRouter model is the fallback when Azure fails (the fallback model is the builder's call). Use one small client interface with both providers behind it. LLM use is limited to: discovery classification, news-post version claims, and one-line summaries. Every LLM output that drives an alert is verified in code (section 8.2).
 
@@ -235,14 +235,14 @@ DocExtractor ids are plain references, never cross-stack foreign keys.
 Each phase ships something usable on its own.
 
 1. **Catalog and discovery.** Scaffold the repo, chart and database. Build the catalog sync (with the Veeam core-product exclusion), the discovery pipeline and the web review queue. Do the initial discovery (section 10). *Done when* the owner has confirmed the release-notes and news-source list.
-2. **Release-notes watch.** First the public sources: the direct fetcher with host policies, extraction, normalisation, entry splitting, confirmation re-fetch, plausibility gates, LLM summaries, and the Teams digest with health. Feeds (RSS, Atom, GitHub releases) and index-page release detection are included. **Then, still in this phase, the AvePoint and Eon logins:** `session` mode for AvePoint and the scripted Eon login, both through the shared Browserless. Neither uses MFA, so re-login runs unattended. *Done when* a week of digests has carried no false positives, both login vendors produce baselines, and a login expiry shows up as a health item, not a change.
+2. **Release-notes watch.** First the public sources: the direct fetcher with host policies, extraction, normalisation, entry splitting, confirmation re-fetch, plausibility gates, LLM summaries, and the Teams digest with health. Feeds (RSS, Atom, GitHub releases) and index-page release detection are included. **Then, still in this phase, the AvePoint, Eon and Securiti.ai logins:** `session` mode for AvePoint, the scripted Eon login, and the Securiti.ai help-center login, all through the shared Browserless. AvePoint and Eon don't use MFA (Securiti.ai still to be confirmed), so re-login runs unattended. *Done when* a week of digests has carried no false positives, all three login vendors produce baselines, and a login expiry shows up as a health item, not a change.
 3. **Version watch.** Version profiles, news-source monitoring with LLM claims and code verification, release-notes evidence, template-probe confirmation, candidate states and immediate alerts. *Done when* replaying a known past bump would have alerted. Commvault 11.44 to 11.46 is the suggested test: feed the vendor's announcement posts for 11.46 through the pipeline.
 4. **Coverage.** `browser` mode for Akamai-gated hosts (Dell, Red Hat), through the shared Browserless and Firecrawl, plus any sources that discovery or the health report show still need work.
 
 ## 14. Builder's environment
 
 - The DocExtractor repository is checked out next to this one at `../doc-extractor`. Use it to reuse the per-platform body selectors from DocExtractor's profiles, and to mirror its CI, image registry and `helm upgrade` flow.
-- The read-only DocExtractor key (`DOC-EXTRACTOR`) and the OpenRouter key (`OPENROUTER`) are in `.secrets`, with the Azure OpenAI key and endpoint to be added there, at the repo root. **It must be git-ignored before the first commit**, never logged, and in the cluster replaced by Kubernetes Secrets. AvePoint and Eon credentials will be added there for phase 2. The builder may use them to script and test the logins.
+- The read-only DocExtractor key (`DOC-EXTRACTOR`) and the OpenRouter key (`OPENROUTER`) are in `.secrets`, with the Azure OpenAI key and endpoint to be added there, at the repo root. **It must be git-ignored before the first commit**, never logged, and in the cluster replaced by Kubernetes Secrets. AvePoint, Eon and Securiti.ai credentials will be added there for phase 2. The builder may use them to script and test the logins.
 - `kubectl`, `helm` and `gh` are available on the build machine. DocExtractor's LAN API (`http://docextractor.k3s.home.lan/api`) is reachable and answers 401 without a key.
 
 ## 15. Left to the builder

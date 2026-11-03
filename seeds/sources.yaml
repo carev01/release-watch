@@ -200,6 +200,212 @@ watched_sources:
     pattern learn.avepoint.com/<product>-release-notes/... and learn.avepoint.com/release-notes/ also redirects
     to login.'
 
+# --- Added 2026-11-03 after the owner's review: stable parents for moving URLs, and version-tracking pages. ---
+# Index pages below need a "newest child" rule (Phase 2); the rule is recorded in notes for now.
+- vendor: Afi.ai
+  product: Afi.ai
+  url: https://afi.ai/docs/sitemap.xml
+  kind: index_page
+  selector: null
+  title: Afi docs sitemap (What's New release-notes pages)
+  notes: 'Owner: the release slug changes per release (afi-jul-2026 -> afi-oct-2026). MkDocs sitemap, HTTP 200. Newest child
+    = <loc> matching /docs/whats-new/afi-<mon>-<yyyy>/release-notes/ with the latest month-year (now afi-oct-2026). lastmod is
+    the build date for every URL, so ignore it. Skip /de/ /fr/ /es/. /docs/whats-new/ returns 403.'
+- vendor: Axcient
+  product: x360Recover
+  url: https://docs.connectwise.com/x360Recover/Release_Notes
+  kind: index_page
+  selector: null
+  title: x360Recover Release Notes (ConnectWise MindTouch parent)
+  notes: 'Owner pointed at .../x360Recover_Release_Notes_2026 (tied to the year). This is its parent. HTTP 200 after a guest-auth
+    redirect that sets a cookie (keep cookies across redirects). Newest = highest-year child, then its lowest-numbered
+    subpage: now _2026/035 "September 2026 - x360Recover - v17.7.0". "010 Latest" is stale. JSON:
+    https://docs.connectwise.com/@api/deki/pages/=x360Recover%252FRelease_Notes/subpages?dream.out.format=json'
+- vendor: Druva
+  product: Druva
+  url: https://help.druva.com/en/articles/10206884-latest-product-updates
+  kind: index_page
+  selector: null
+  title: Druva Latest Product Updates (hub of current release notes)
+  notes: 'Intercom, raw HTML. Links the evergreen per-workload "Release Notes" articles, which hold the current year; older
+    years move to "Archived ... YYYY" articles. Hub slugs differ from stored slugs for the same article ID (10898183, 8808078,
+    8829600), so match on the ID. GovCloud articles are not linked here.'
+- vendor: NinjaOne (Dropsuite)
+  product: SaaS Backup
+  url: https://help.dropsuite.com/api/v2/help_center/en-us/categories/21792313200023/articles.json?sort_by=created_at&sort_order=desc
+  kind: index_page
+  selector: null
+  title: NinjaOne SaaS Backup Release Notes (Zendesk category, JSON)
+  notes: 'Owner: track the newer monthly releases in the article TOC. The category "Release Notes" holds the year sections (2026
+    = 37443092719127, 2025, 2024). Newest = first item: "NinjaOne SaaS Backup Release Notes: September 2026" (2026-10-06).'
+- vendor: Zerto
+  product: Zerto
+  url: https://help-be.zerto.com/api/categories
+  kind: index_page
+  selector: null
+  title: Zerto Release Notes category (Zoomin backend JSON)
+  notes: 'Owner: track https://help.zerto.com/category/ReleaseNotes and the linked pages for the newest version. That page is
+    JS-only, so this is its backend JSON. Node id=ReleaseNotes, subLinks lowest position = newest version (RN.HTML.10.9). Then
+    GET https://help-be.zerto.com/api/bundle/RN.HTML.10.9/toc?language=enus, first childEntries = newest (10.9.10). Rewrite
+    help-be to help.zerto.com for links.'
+- vendor: Acronis
+  product: Cyber Protect Cloud
+  url: https://dl.acronis.com/u/baas/rn/agent/en-US/AcronisCyberProtectionAgent_relnotes.htm
+  kind: entry_page
+  selector: null
+  title: Acronis Cyber Protection Agent release history (Cyber Protect Cloud)
+  notes: 'Evergreen, raw HTML. Newest on top: 26.10.43461, November 2026. Stands in for the owner-given
+    care.acronis.com/s/article/56310-Acronis-Cyber-Cloud-released-builds, which is Salesforce Aura and has no content without
+    a browser (Phase 4).'
+- vendor: Acronis
+  product: Cyber Protect On-premises
+  url: https://dl.managed-protection.com/u/cyberprotect/rn/17/user/en-US/AcronisCyberProtect17_relnotes.htm
+  kind: entry_page
+  selector: null
+  title: Acronis Cyber Protect 17 release notes
+  notes: 'Owner-given. VERSION-PINNED to 17; latest build 17.1.43095 (September 9, 2026). The next entry detects a v18.'
+- vendor: Acronis
+  product: Cyber Protect On-premises
+  url: https://www.acronis.com/en/support/documentation/
+  kind: index_page
+  selector: null
+  title: Acronis documentation index (release-notes links)
+  notes: 'Links are in embedded JSON. Newest = highest N in dl.managed-protection.com/u/cyberprotect/rn/<N>/ (now 17; /rn/18/
+    is 404). The index can lag: it still links Cloud 25.10 though /baas/rn/26.10/ exists.'
+- vendor: Hornetsecurity (Altaro)
+  product: Backup & Recovery
+  url: https://www.hornetsecurity.com/en/blog/release-notes/release-notes-365-total-backup-en/feed/
+  kind: feed
+  selector: null
+  title: Hornetsecurity 365 Total Backup release notes (RSS)
+  notes: 'Owner-given page (without /feed/), watched through its WordPress feed. Newest: "365 Total Backup - Hotfix October 20,
+    2026". May later move to proofpoint-total-protection.com.'
+- vendor: Hornetsecurity (Altaro)
+  product: Backup & Recovery
+  url: https://www.hornetsecurity.com/en/blog/release-notes/release-notes-vm-backup-en/feed/
+  kind: feed
+  selector: null
+  title: Hornetsecurity VM Backup release notes (RSS)
+  notes: 'Owner-given page (without /feed/), watched through its WordPress feed. Newest: VM Backup 9.21.0.0 (2026-08-12). The
+    Proofpoint page https://www.proofpoint-total-protection.com/services/vm-backup/update/ is stale (9.18.1.0); recheck it later.'
+- vendor: N-Able
+  product: Cove Data Protection
+  url: https://status.n-able.com/category/cove-data-protection/cove-data-protection-release-notes/feed/
+  kind: feed
+  selector: null
+  title: Cove Data Protection release notes (RSS)
+  notes: 'Owner-given page (without /feed/), watched through its WordPress feed. 50 items, newest "What''s New in Cove 26.10"
+    (2026-10-22).'
+- vendor: Arcserve
+  product: Arcserve UDP
+  url: https://documentation.arcserve.com/Content/DocBookshelf.htm
+  kind: index_page
+  selector: null
+  title: Arcserve Documentation Bookshelf (all products and versions)
+  notes: 'Static HTML index of per-version bookshelves (UDP 11.0, Backup 19.0, RHA 18.0). A new version adds an
+    /Available/<ver>/ link. The owner-suggested weekly digest (How-to-Subscribe article) is email-only behind a portal login,
+    so it is unusable without an inbox.'
+- vendor: Arctera
+  product: Backup Exec
+  url: https://docs.backupexec.com/us/en/backupexec-userdocs/release-notes/all-platforms/backup-exec-readme.html
+  kind: index_page
+  selector: null
+  title: Backup Exec readme index (all versions)
+  notes: 'The version list is JSON in the data-items attribute of the raw HTML (v20.0 to v25.1). The visible list is built by JS,
+    so the extractor must keep data-items. backupexec.com is now a 2-page Cognizant handover site that never changes.'
+- vendor: Arctera
+  product: System Recovery
+  url: https://docs.backupexec.com/us/en/sr-userdocs/release-notes/all-platforms/arctera-system-recovery-24-readme.html
+  kind: index_page
+  selector: null
+  title: System Recovery readme index (all versions)
+  notes: 'Same data-items JSON; newest v24.1. The node name contains "24", so a v25 may get a sibling listed at
+    /us/en/sr-userdocs/release-notes/all-platforms.html.'
+- vendor: Dell
+  product: PowerProtect Data Manager
+  url: https://www.dell.com/support/kbdoc/en-us/000196987/dell-powerprotect-data-manager-info-hub-product-documents-and-information
+  kind: index_page
+  selector: null
+  title: PowerProtect Data Manager Info Hub (KB 000196987)
+  notes: 'Static HTML, one Documentation Set per version, newest 20.3 (DocExtractor still has 20-2). The PPDM release notes and
+    Patch Notes KB 000241723 redirect to Dell login; user and admin guides are public.'
+- vendor: Dell
+  product: Avamar
+  url: https://www.dell.com/support/kbdoc/en-us/000287523/dell-avamar-info-hub
+  kind: index_page
+  selector: null
+  title: Dell Avamar Info Hub (master)
+  notes: Static HTML. Links the per-version hubs (19.12 newest). A new version should add a hub link here.
+- vendor: Dell
+  product: NetWorker
+  url: https://www.dell.com/support/kbdoc/en-us/000415792/dell-networker-19-14-info-hub
+  kind: entry_page
+  selector: null
+  title: Dell NetWorker 19.14 Info Hub
+  notes: 'VERSION-PINNED: Dell publishes one hub per NetWorker version (19.13 is KB 000341948) and has no master hub. New
+    versions must come from news.'
+- vendor: IBM
+  product: Storage Protect
+  url: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+  kind: entry_page
+  selector: null
+  title: IBM Docs product API - Storage Protect versions (JSON)
+  notes: 'JSON behind the IBM Docs version selector. taxonomy.versions[0] is 8.2.2, while the watched docs URLs are pinned to
+    8.2.1. The same API works for sps, spfve, spfd, spfm, spferp, sphfw and spp (10.1.19).'
+- vendor: IBM
+  product: Copy Services Manager
+  url: https://www.ibm.com/docs/api/v1/product/csm?lang=en
+  kind: entry_page
+  selector: null
+  title: IBM Docs product API - Copy Services Manager versions (JSON)
+  notes: Newest is 6.3.19 (the DocExtractor source is 6.3.18).
+- vendor: IBM
+  product: Storage Defender
+  url: https://www.ibm.com/docs/api/v1/product/scdm?lang=en
+  kind: entry_page
+  selector: null
+  title: IBM Docs product API - Storage Defender CDM versions (JSON)
+  notes: 'Newest is 2.3.2 (watched URLs pinned to 2.3.1). Sentinel: /docs/api/v1/product/storage-sentinel (2.3.2). The
+    storage-defender key only reports "Base".'
+- vendor: Red Hat
+  product: OADP
+  url: https://access.redhat.com/product-life-cycles/api/v1/products?name=OpenShift%20API%20for%20Data%20Protection
+  kind: entry_page
+  selector: null
+  title: Red Hat Product Life Cycle API - OADP (JSON)
+  notes: 'Plain JSON, no Akamai block. Newest minor 1.6 (GA 2026-06-09). OCP versions: name=OpenShift%20Container%20Platform%204
+    (OCP 5.0 GA 2026-11-03), which re-points the pinned docs URL.'
+- vendor: Red Hat
+  product: OADP
+  url: https://docs.redhat.com/en/documentation/openshift_container_platform/5.0/html/backup_and_restore/oadp-application-backup-and-restore
+  kind: entry_page
+  selector: null
+  title: OADP release notes in the OCP 5.0 docs
+  notes: 'OCP 5.0 replaces the 4.22 URL from today (2026-11-03). Returns 200 with browser headers and lists OADP 1.6.0-1.6.2.
+    VERSION-PINNED to OCP 5.0.'
+- vendor: Atempo
+  product: Lina
+  url: https://documentation.atempo.com/products-lifecycle-1/product-end-of-support-policies/lina-lifecycle.md
+  kind: entry_page
+  selector: null
+  title: Lina lifecycle (markdown)
+  notes: GitBook lifecycle table; newest Lina 7.4 (June 2026). A new version adds a top row.
+- vendor: Atempo
+  product: Tina
+  url: https://documentation.atempo.com/products-lifecycle-1/product-end-of-support-policies/tina-lifecycle.md
+  kind: entry_page
+  selector: null
+  title: Tina lifecycle (markdown)
+  notes: Newest Tina 4.9.5 (October 2026).
+- vendor: Atempo
+  product: Miria
+  url: https://documentation.atempo.com/products-lifecycle-1/product-end-of-support-policies/miria-lifecycle.md
+  kind: entry_page
+  selector: null
+  title: Miria lifecycle (markdown)
+  notes: 'Newest Miria 4.6 (October 2026). Backup signal: https://documentation.atempo.com/sitemap.xml lists the current version
+    spaces.'
+
 news_sources:
 - vendor: Arcserve
   product: null
@@ -334,3 +540,40 @@ news_sources:
   kind: feed
   notes: HPE newsroom RSS. Newest item 2026-11-03. Corporate-wide and very noisy, so Zerto items will be rare. Fallback
     only.
+# --- Added 2026-11-03 after the owner's review. ---
+- vendor: Acronis
+  product: null
+  url: https://www.acronis.com/en-us/blog/feed.xml
+  kind: feed
+  notes: 'Owner-given (www.acronis.com/en/blog/), watched through its RSS. Newest item 2026-11-03.'
+- vendor: Acronis
+  product: null
+  url: https://www.acronis.com/en/pr/
+  kind: listing
+  notes: 'Owner-given. No press RSS. Raw-HTML listing; cards carry published_at.'
+- vendor: Arcserve
+  product: null
+  url: https://www.arcserve.com/ja/press-releases/rss.xml
+  kind: feed
+  notes: 'Arcserve Japan press RSS. It posts an "Info: ... リリースのご案内" item per release (UDP 11 / CRS 2 on 2026-08-05).'
+- vendor: IBM
+  product: null
+  url: https://www.ibm.com/docs/api/v1/search/announcements?query=%22Storage%20Protect%22%20OR%20%22Storage%20Defender%22&type=announcement&start=0&limit=20&start-announce-date=2026-01-01&end-announce-date=2026-12-31
+  kind: listing
+  notes: 'IBM announcement-letter search (JSON). Not date-sorted, and the dates must roll every year. Mostly EOS letters, with
+    occasional release letters.'
+- vendor: Rubrik
+  product: null
+  url: https://ir.rubrik.com/rss/PressRelease.aspx
+  kind: feed
+  notes: Investor-relations press RSS, including product launches. Release notes are only inside the product UI.
+- vendor: Rubrik
+  product: null
+  url: https://www.rubrik.com/company/newsroom
+  kind: listing
+  notes: Static HTML newsroom.
+- vendor: Rubrik
+  product: null
+  url: https://www.rubrik.com/blog
+  kind: listing
+  notes: Static HTML blog listing, no RSS. Mostly thought-leadership.
