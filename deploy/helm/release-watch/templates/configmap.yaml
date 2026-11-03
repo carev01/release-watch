@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  labels: {{- include "rw.labels" . | nindent 4 }}
+data:
+  RW_DOCEXTRACTOR_BASE_URL: {{ .Values.docextractor.baseUrl | quote }}
+  RW_DOCEXTRACTOR_UI_URL: {{ .Values.docextractor.uiUrl | quote }}

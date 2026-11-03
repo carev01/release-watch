@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-web
+  labels: {{- include "rw.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/instance: {{ .Release.Name }}, app.kubernetes.io/component: web }
+  template:
+    metadata:
+      labels:
+        {{- include "rw.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+    spec:
+      initContainers:
+        - name: migrate
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Retries until Postgres is reachable, so install order doesn't matter.
+          command: ["sh", "-c", "until release-watch migrate; do echo 'waiting for postgres'; sleep 5; done"]
+          envFrom: [{ configMapRef: { name: {{ .Release.Name }}-config } }]
+          env: {{- include "rw.env" . | nindent 12 }}
+      containers:
+        - name: web
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["web", "--host", "0.0.0.0", "--port", "8000"]
+          ports: [{ name: http, containerPort: 8000 }]
+          envFrom: [{ configMapRef: { name: {{ .Release.Name }}-config } }]
+          env: {{- include "rw.env" . | nindent 12 }}
+          readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 30, failureThreshold: 5 }
+          resources: {{- toYaml .Values.web.resources | nindent 12 }}

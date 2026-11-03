@@ -1,0 +1,6 @@
+apiVersion: v2
+name: release-watch
+description: Daily watch of vendor release notes and new product versions
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

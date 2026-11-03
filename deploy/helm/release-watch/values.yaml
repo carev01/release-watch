@@ -1,0 +1,39 @@
+image:
+  repository: ghcr.io/carev01/release-watch
+  tag: latest
+  pullPolicy: Always
+
+# Created by hand, never in values (see README):
+#   RW_DOCEXTRACTOR_API_KEY, RW_AZURE_OPENAI_API_KEY, RW_AZURE_OPENAI_ENDPOINT,
+#   RW_OPENROUTER_API_KEY, POSTGRES_PASSWORD (URL-safe characters only)
+existingSecret: release-watch-secrets
+
+timezone: America/Sao_Paulo
+
+docextractor:
+  baseUrl: http://docextractor-backend.docextractor.svc:8000/api
+  uiUrl: http://docextractor.k3s.home.lan
+
+web:
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 512Mi }
+
+cron:
+  sync: "0 5 * * *"
+  discover: "30 5 * * 1"
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 1Gi }
+
+ingress:
+  enabled: true
+  className: traefik
+  host: release-watch.k3s.home.lan
+
+postgres:
+  image: postgres:16-alpine
+  user: release_watch
+  database: release_watch
+  storageSize: 1Gi
+  storageClassName: ""        # "" = cluster default

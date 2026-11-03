@@ -1,0 +1,4 @@
+ingress:
+  host: release-watch.k3s.home.lan
+image:
+  tag: latest

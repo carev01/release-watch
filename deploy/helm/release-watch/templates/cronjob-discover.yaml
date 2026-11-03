@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-discover
+  labels: {{- include "rw.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cron.discover | quote }}
+  timeZone: {{ .Values.timezone | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            {{- include "rw.labels" . | nindent 12 }}
+            app.kubernetes.io/component: discover
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: discover
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              args: ["discover"]
+              envFrom: [{ configMapRef: { name: {{ .Release.Name }}-config } }]
+              env: {{- include "rw.env" . | nindent 16 }}
+              resources: {{- toYaml .Values.cron.resources | nindent 16 }}
