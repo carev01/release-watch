@@ -130,3 +130,40 @@ async def test_browser_headers_sent_with_default_ua():
     assert headers["Sec-Fetch-Mode"] == "navigate"
     assert headers["Accept-Language"].startswith("en")
     assert "Sec-Fetch-Mode" not in ibm.calls[0].request.headers
+
+
+@respx.mock
+async def test_cookies_kept_across_redirects():
+    respx.get("https://docs.cw.com/page").mock(side_effect=lambda req: (
+        httpx.Response(200, text="x" * 5000) if "guest=1" in req.headers.get("cookie", "")
+        else httpx.Response(302, headers={"location": "https://docs.cw.com/auth?u=guest"})))
+    respx.get("https://docs.cw.com/auth").mock(return_value=httpx.Response(
+        302, headers={"location": "https://docs.cw.com/page", "set-cookie": "guest=1; Path=/"}))
+    async with Fetcher(settings(), policies={}, default_policy=HostPolicy(min_delay_ms=0)) as f:
+        r = await f.fetch("https://docs.cw.com/page")
+    assert r.status == 200 and r.outcome == "ok"
+
+
+@respx.mock
+async def test_retry_after_capped(monkeypatch):
+    slept = []
+
+    async def fake_sleep(s):
+        slept.append(s)
+
+    monkeypatch.setattr("release_watch.fetch.asyncio.sleep", fake_sleep)
+    respx.get("https://a.com/x").mock(side_effect=[httpx.Response(429, headers={"Retry-After": "99999"}),
+                                                    httpx.Response(200, text="x" * 5000)])
+    async with Fetcher(settings(), policies=fast_policies()) as f:
+        r = await f.fetch("https://a.com/x")
+    assert r.status == 200
+    assert max(slept) <= 120
+
+
+@respx.mock
+async def test_body_too_large(monkeypatch):
+    monkeypatch.setattr("release_watch.fetch.MAX_BODY_BYTES", 1000)
+    respx.get("https://a.com/big").mock(return_value=httpx.Response(200, text="x" * 5000))
+    async with Fetcher(settings(), policies=fast_policies()) as f:
+        r = await f.fetch("https://a.com/big")
+    assert (r.outcome, r.reason) == ("error", "too_large")

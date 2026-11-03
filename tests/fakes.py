@@ -44,3 +44,12 @@ class FakeDocExtractor:
             from release_watch.docextractor import DocExtractorError
             raise DocExtractorError(f"GET /articles/toc/{source_id}: ReadTimeout")
         return self.tocs.get(str(source_id), [])
+
+
+def fast_fetcher(transport=None):
+    """A Fetcher with no per-host delay, for respx-backed tests."""
+    from release_watch.config import Settings
+    from release_watch.fetch import Fetcher, HostPolicy
+
+    settings = Settings(database_url="postgresql+psycopg://x@y/z", docextractor_api_key="k")
+    return Fetcher(settings, policies={}, transport=transport, default_policy=HostPolicy(min_delay_ms=0))

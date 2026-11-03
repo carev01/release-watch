@@ -15,6 +15,8 @@ from release_watch.urls import host_of
 ATTEMPTS = 3
 RETRY_STATUSES = {429, 503}
 SHORT_PAGE_BYTES = 1000
+MAX_RETRY_AFTER = 120
+MAX_BODY_BYTES = 15_000_000
 LOGIN_PATTERN = re.compile(r"(^|[./_-])(login|signin|sign-in|sso|auth|oauth)([./_?=-]|$)|/account/", re.I)
 
 BROWSER_HEADERS = {
@@ -56,11 +58,11 @@ class FetchResult:
     reason: str
 
 
-def policy_for(host: str, policies: dict[str, HostPolicy]) -> HostPolicy:
+def policy_for(host: str, policies: dict[str, HostPolicy], default: HostPolicy | None = None) -> HostPolicy:
     for suffix, policy in policies.items():
         if host == suffix or host.endswith("." + suffix):
             return policy
-    return HostPolicy()
+    return default or HostPolicy()
 
 
 def _looks_like_login(url: str) -> bool:
@@ -86,9 +88,11 @@ def classify_response(status: int | None, url: str, final_url: str, body: str,
 
 class Fetcher:
     def __init__(self, settings: Settings, policies: dict[str, HostPolicy] = DEFAULT_HOST_POLICIES,
-                 transport: httpx.AsyncBaseTransport | None = None):
+                 transport: httpx.AsyncBaseTransport | None = None, default_policy: HostPolicy | None = None):
         self._settings = settings
         self._policies = policies
+        self._default_policy = default_policy
+        # One client for the run: its cookie jar keeps cookies set mid-redirect (ConnectWise guest auth).
         self._client = httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(30.0),
                                          transport=transport)
         self._semaphores: dict[str, asyncio.Semaphore] = {}
@@ -110,7 +114,7 @@ class Fetcher:
 
     async def fetch(self, url: str) -> FetchResult:
         host = host_of(url)
-        policy = policy_for(host, self._policies)
+        policy = policy_for(host, self._policies, self._default_policy)
         sem = self._semaphores.setdefault(host, asyncio.Semaphore(policy.max_concurrency))
         headers = {"User-Agent": policy.user_agent or self._settings.user_agent,
                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}
@@ -130,6 +134,9 @@ class Fetcher:
                 if resp.status_code in RETRY_STATUSES and attempt < ATTEMPTS - 1:
                     await asyncio.sleep(_retry_after(resp, attempt))
                     continue
+                if len(resp.content) > MAX_BODY_BYTES:
+                    return FetchResult(url, str(resp.url), resp.status_code, resp.headers.get("content-type", ""),
+                                       "", len(resp.content), "error", "too_large")
                 body = resp.text
                 outcome, reason = classify_response(resp.status_code, url, str(resp.url), body, policy)
                 return FetchResult(url, str(resp.url), resp.status_code, resp.headers.get("content-type", ""),
@@ -139,6 +146,6 @@ class Fetcher:
 
 def _retry_after(resp: httpx.Response, attempt: int) -> float:
     try:
-        return max(float(resp.headers.get("Retry-After", "")), 1.0)
+        return min(max(float(resp.headers.get("Retry-After", "")), 1.0), MAX_RETRY_AFTER)
     except ValueError:
         return float(2 ** (attempt + 1))

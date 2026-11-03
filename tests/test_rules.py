@@ -1,0 +1,117 @@
+import json
+
+import httpx
+import respx
+
+from release_watch.watch.rules import Child, children, json_entries, newest, pick_children, version_tuple
+from tests.fakes import fast_fetcher
+
+
+def test_links_pick_with_regex():
+    html = ('<main><a href="/rn/2026-oct">Oct 2026</a><a href="https://x.com/rn/2026-sep">Sep 2026</a>'
+            '<a href="/pricing">Pricing</a></main>')
+    kids = pick_children(html, "text/html", "https://x.com/rn/", {"type": "links", "href_regex": r"/rn/\d{4}"})
+    assert [(c.url, c.title) for c in kids] == [("https://x.com/rn/2026-oct", "Oct 2026"),
+                                                ("https://x.com/rn/2026-sep", "Sep 2026")]
+
+
+def test_links_pick_dedupes_urls():
+    html = '<a href="/a">A</a><a href="/a">A again</a>'
+    assert len(pick_children(html, "text/html", "https://x.com/", {"type": "links"})) == 1
+
+
+def test_sitemap_pick():
+    xml = ("<urlset><url><loc>https://afi.ai/docs/whats-new/afi-oct-2026/release-notes/</loc></url>"
+           "<url><loc>https://afi.ai/docs/de/whats-new/afi-oct-2026/release-notes/</loc></url>"
+           "<url><loc>https://afi.ai/docs/whats-new/afi-jul-2026/release-notes/</loc></url>"
+           "<url><loc>https://afi.ai/docs/setup/</loc></url></urlset>")
+    kids = pick_children(xml, "application/xml", "https://afi.ai/docs/sitemap.xml",
+                         {"type": "sitemap", "loc_regex": r"/docs/whats-new/afi-[a-z]{3}-\d{4}/release-notes/$"})
+    assert [c.url for c in kids] == ["https://afi.ai/docs/whats-new/afi-oct-2026/release-notes/",
+                                     "https://afi.ai/docs/whats-new/afi-jul-2026/release-notes/"]
+
+
+def test_json_pick_orders():
+    body = json.dumps({"categories": [{"id": "ReleaseNotes", "subLinks": [
+        {"title": "10.8", "url": "/bundle/RN.HTML.10.8", "position": 2},
+        {"title": "10.9", "url": "/bundle/RN.HTML.10.9", "position": 1}]}]})
+    kids = pick_children(body, "application/json", "https://help-be.zerto.com/api/categories",
+                         {"type": "json", "items": "categories.*.subLinks", "url": "url", "title": "title",
+                          "order_by": "position", "order": "asc"})
+    assert [c.title for c in kids] == ["10.9", "10.8"]
+    assert kids[0].url == "https://help-be.zerto.com/bundle/RN.HTML.10.9"
+
+
+def test_json_pick_url_template():
+    body = json.dumps({"items": [{"id": 7, "name": "A"}]})
+    kids = pick_children(body, "application/json", "https://x.com/api",
+                         {"type": "json", "items": "items", "title": "name", "url_template": "https://x.com/p/{id}"})
+    assert kids == [Child(url="https://x.com/p/7", title="A", number=None)]
+
+
+def test_versions_pick_newest_first():
+    body = json.dumps({"taxonomy": {"versions": ["8.2.1", "8.2.2", "8.1.0", "8.2.2"]}})
+    kids = pick_children(body, "application/json", "https://www.ibm.com/docs/api/v1/product/x",
+                         {"type": "versions", "json_path": "taxonomy.versions"})
+    assert [c.title for c in kids] == ["8.2.2", "8.2.1", "8.1.0"]
+
+
+def test_versions_pick_from_text_with_regex():
+    text = "<table><tr><td>Lina 7.4</td></tr><tr><td>Lina 7.3</td></tr><tr><td>Lina 7.10</td></tr></table>"
+    kids = pick_children(text, "text/html", "https://x.com/",
+                         {"type": "versions", "regex": r"Lina (\d+\.\d+)"})
+    assert [c.title for c in kids] == ["7.10", "7.4", "7.3"]
+
+
+def test_newest_max_number():
+    kids = [Child("https://x/_2025", "2025", 2025.0), Child("https://x/_2026", "2026", 2026.0)]
+    assert newest(kids, "max_number").title == "2026"
+    assert newest(kids, "first").title == "2025"
+
+
+def test_version_tuple():
+    assert version_tuple("11.48") > version_tuple("11.46")
+    assert version_tuple("v10.9.10") > version_tuple("10.9.9")
+    assert version_tuple("25-1") > version_tuple("24-2")
+
+
+@respx.mock
+async def test_two_level_then_follows_newest():
+    respx.get("https://docs.x.com/RN").mock(return_value=httpx.Response(200, text=(
+        '<a href="/RN/RN_2025">RN 2025</a><a href="/RN/RN_2026">RN 2026</a>' + " " * 2000)))
+    respx.get("https://docs.x.com/RN/RN_2026").mock(return_value=httpx.Response(200, text=(
+        '<a href="/RN/RN_2026/035">September 2026 - v17.7.0</a><a href="/RN/RN_2026/040">July 2026</a>'
+        + " " * 2000)))
+    follow = {"pick": {"type": "links", "href_regex": r"/RN/RN_\d{4}$", "number_regex": r"(\d{4})"},
+              "newest": "max_number",
+              "then": {"pick": {"type": "links", "href_regex": r"/RN/RN_\d{4}/\d+$"}}}
+    async with fast_fetcher() as f:
+        result, kids = await children(f, "https://docs.x.com/RN", follow)
+    assert result.outcome == "ok"
+    assert [c.url for c in kids] == ["https://docs.x.com/RN/RN_2026/035", "https://docs.x.com/RN/RN_2026/040"]
+
+
+@respx.mock
+async def test_url_rewrite():
+    respx.get("https://help-be.x.com/api/c").mock(return_value=httpx.Response(
+        200, json={"items": [{"t": "A", "u": "https://help-be.x.com/bundle/A"}]}))
+    follow = {"pick": {"type": "json", "items": "items", "title": "t", "url": "u"},
+              "url_rewrite": [["help-be.x.com", "help.x.com"]]}
+    async with fast_fetcher() as f:
+        _, kids = await children(f, "https://help-be.x.com/api/c", follow)
+    assert kids[0].url == "https://help.x.com/bundle/A"
+
+
+def test_json_entries_zendesk():
+    body = json.dumps({"articles": [
+        {"id": 2, "title": "September 2026", "body": "<ul><li>New A</li></ul>", "html_url": "https://h/2",
+         "created_at": "2026-10-06T10:00:00Z"},
+        {"id": 1, "title": "August 2026", "body": "<p>B</p>", "html_url": "https://h/1",
+         "created_at": "2026-09-01T10:00:00Z"}]})
+    rule = {"items": "articles", "key": "id", "title": "title", "body": "body", "url": "html_url",
+            "date": "created_at", "body_format": "html"}
+    entries = json_entries(body, rule)
+    assert [e.key for e in entries] == ["2", "1"]
+    assert entries[0].heading == "September 2026"
+    assert entries[0].body.startswith("## September 2026") and "New A" in entries[0].body
+    assert entries[0].url == "https://h/2" and entries[0].published_at.year == 2026
