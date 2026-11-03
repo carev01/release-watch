@@ -1,0 +1,146 @@
+"""Propose release-notes candidates from DocExtractor's catalog (briefing: "Finding release-notes pages")."""
+
+import re
+import uuid
+from dataclasses import dataclass
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from release_watch.models import CatalogProduct, CatalogSource, CatalogVendor, WatchedSource
+from release_watch.urls import normalize_url
+
+RELEASE_PATTERN = re.compile(
+    r"release[ _-]?notes?|what'?s[ _-]?new|new[ _-]features|change[ _-]?log|revision[ _-]history|readme"
+    r"|product[ _-]updates",
+    re.IGNORECASE,
+)
+SEARCH_QUERIES = ("release notes", "what's new", "changelog")
+
+
+@dataclass
+class Proposal:
+    vendor_name: str
+    product_de_id: str | None
+    de_source_id: str | None
+    de_article_id: str | None
+    url: str
+    title: str | None
+    kind_hint: str
+    reason: str
+
+
+def _watchable_sources(session: Session) -> dict[str, tuple[CatalogSource, CatalogProduct, str]]:
+    rows = session.execute(
+        select(CatalogSource, CatalogProduct, CatalogVendor.name)
+        .join(CatalogProduct, CatalogProduct.de_id == CatalogSource.product_de_id)
+        .join(CatalogVendor, CatalogVendor.de_id == CatalogProduct.vendor_de_id)
+        .where(CatalogSource.active.is_(True), CatalogProduct.active.is_(True),
+               CatalogProduct.excluded.is_(False), CatalogVendor.active.is_(True))
+    ).all()
+    return {str(src.de_id): (src, prod, vendor) for src, prod, vendor in rows}
+
+
+def _walk(entries: list[dict]):
+    for entry in entries:
+        yield entry
+        yield from _walk(entry.get("children") or [])
+
+
+def _first_url(entry: dict) -> str | None:
+    if entry.get("url"):
+        return entry["url"]
+    for child in _walk(entry.get("children") or []):
+        if child.get("url"):
+            return child["url"]
+    return None
+
+
+def _toc_matches(entries: list[dict]):
+    """Matching TOC entries; a matching branch is returned once and its children are not searched."""
+    for entry in entries:
+        if RELEASE_PATTERN.search(entry.get("title") or ""):
+            yield entry
+        else:
+            yield from _toc_matches(entry.get("children") or [])
+
+
+async def propose_candidates(client, session: Session) -> list[Proposal]:
+    sources = _watchable_sources(session)
+    proposals: dict[str, Proposal] = {}
+    covered: set[str] = set()
+
+    def add(p: Proposal) -> None:
+        proposals.setdefault(normalize_url(p.url), p)
+        if p.de_source_id:
+            covered.add(p.de_source_id)
+
+    # Pass 1: whole sources whose name says release notes.
+    for sid, (src, prod, vendor) in sources.items():
+        if not RELEASE_PATTERN.search(src.name):
+            continue
+        kind = "index_page" if src.source_type == "pdf" else "entry_page"
+        if src.source_type == "web":
+            toc = await client.get_toc(sid)
+            if sum(1 for e in _walk(toc) if e.get("url")) > 1:
+                kind = "index_page"
+        add(Proposal(vendor, str(prod.de_id), sid, None, src.base_url, src.name, kind, "source_name"))
+
+    # Pass 2: TOC branches or pages named like release notes inside other web sources.
+    for sid, (src, prod, vendor) in sources.items():
+        if sid in covered or src.source_type != "web":
+            continue
+        for entry in _toc_matches(await client.get_toc(sid)):
+            url = _first_url(entry)
+            if not url:
+                continue
+            if entry.get("children"):
+                add(Proposal(vendor, str(prod.de_id), sid, None, url, entry["title"], "index_page", "toc"))
+            else:
+                add(Proposal(vendor, str(prod.de_id), sid, entry.get("article_id"), url, entry["title"],
+                             "entry_page", "toc"))
+
+    # Pass 3: full-text search; keep only hits whose title or URL says release notes.
+    for q in SEARCH_QUERIES:
+        async for hit in client.search_articles(q):
+            sid = str(hit.get("source_id"))
+            if sid not in sources or sid in covered:
+                continue
+            if not (RELEASE_PATTERN.search(hit.get("title") or "")
+                    or RELEASE_PATTERN.search(hit.get("source_url") or "")):
+                continue
+            src, prod, vendor = sources[sid]
+            proposals.setdefault(normalize_url(hit["source_url"]), Proposal(
+                vendor, str(prod.de_id), sid, str(hit["id"]), hit["source_url"], hit.get("title"),
+                "entry_page", "search"))
+    return list(proposals.values())
+
+
+def upsert_proposals(session: Session, proposals: list[Proposal]) -> dict[str, int]:
+    counts = {"new": 0, "existing": 0, "moved": 0, "skipped_rejected": 0}
+    walled = {str(s.de_id) for s in session.scalars(
+        select(CatalogSource).where(CatalogSource.auth_realm_id.is_not(None)))}
+    for p in proposals:
+        key = normalize_url(p.url)
+        row = None
+        if p.de_article_id:
+            row = session.scalars(select(WatchedSource).where(
+                WatchedSource.de_article_id == uuid.UUID(p.de_article_id))).first()
+            if row and row.url_key != key:
+                row.url, row.url_key = p.url, key
+                counts["moved"] += 1
+                continue
+        row = row or session.scalars(select(WatchedSource).where(WatchedSource.url_key == key)).first()
+        if row:
+            counts["skipped_rejected" if row.state == "rejected" else "existing"] += 1
+            continue
+        session.add(WatchedSource(
+            vendor_name=p.vendor_name, product_de_id=p.product_de_id, de_source_id=p.de_source_id,
+            de_article_id=p.de_article_id, url=p.url, url_key=key, title=p.title, kind=p.kind_hint,
+            state="candidate", origin="heuristic", discovery_reason=p.reason,
+            login_walled=p.de_source_id in walled,
+        ))
+        session.flush()
+        counts["new"] += 1
+    session.commit()
+    return counts
