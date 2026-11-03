@@ -31,7 +31,7 @@ CHROME_USER_AGENT = (
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="RW_", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="RW_", extra="ignore", hide_input_in_errors=True)
 
     database_url: str
     docextractor_base_url: str = "http://docextractor.k3s.home.lan/api"

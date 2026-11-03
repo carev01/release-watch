@@ -2,10 +2,11 @@
 
 from datetime import datetime
 
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from release_watch.docextractor import DocExtractorError
 from release_watch.models import CatalogProduct, CatalogSource, CatalogVendor
 
 
@@ -32,6 +33,13 @@ async def sync_catalog(client, session: Session, excluded_products: list[str], n
     vendors = await client.list_vendors()
     products = await client.list_products()
     sources = await client.list_sources()
+
+    for model, name, fetched in ((CatalogVendor, "vendors", vendors), (CatalogProduct, "products", products),
+                                 (CatalogSource, "sources", sources)):
+        active = session.scalar(select(func.count()).select_from(model).where(model.active.is_(True)))
+        # A truncated or permission-filtered read would otherwise deactivate the catalog in one go.
+        if len(fetched) < active / 2 and active - len(fetched) >= 3:
+            raise DocExtractorError(f"{name}: got {len(fetched)} but {active} are active; refusing to deactivate")
 
     excluded = set(excluded_products)
     deactivated = 0

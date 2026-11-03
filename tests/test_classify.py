@@ -146,3 +146,21 @@ async def test_label_pending_refines_heuristic_kind(session_factory):
     await label_pending(session_factory, FakeFetcher({"https://x.com/rn": page("changelog.html")}), llm)
     with session_factory() as s:
         assert s.scalars(select(WatchedSource)).one().kind == "index_page"
+
+
+async def test_pdf_is_unsure_without_llm():
+    llm = FakeLLM(reply={"label": "release_notes", "kind": "entry_page", "evidence": "Release Notes"})
+    pdf = FetchResult("https://x.com/rn.pdf", "https://x.com/rn.pdf", 200, "application/pdf",
+                      "%PDF-1.7 ... Release Notes ...", 40000, "ok", "")
+    label = await label_candidate(source("https://x.com/rn.pdf"), FakeFetcher({"https://x.com/rn.pdf": pdf}), llm)
+    assert (label.label, label.reason) == ("unsure", "pdf_unparsed")
+    assert llm.calls == 0
+
+
+async def test_thin_page_is_unsure_without_llm():
+    llm = FakeLLM(reply={"label": "not_release_notes", "kind": "unknown", "evidence": ""})
+    html = "<html><body><main>Your search for returned result(s).</main></body></html>" + " " * 5000
+    shell = FetchResult("https://x.com/rn", "https://x.com/rn", 200, "text/html", html, len(html), "ok", "")
+    label = await label_candidate(source(), FakeFetcher({"https://x.com/rn": shell}), llm)
+    assert (label.label, label.reason) == ("unsure", "thin_text")
+    assert llm.calls == 0

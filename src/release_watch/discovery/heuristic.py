@@ -19,7 +19,8 @@ from release_watch.urls import normalize_url
 log = logging.getLogger(__name__)
 
 RELEASE_PATTERN = re.compile(
-    r"release[ _-]?notes?|what'?s[ _-]?new|new[ _-]features|change[ _-]?log|revision[ _-]history|readme"
+    r"release[ _-]?notes?|what[’'`]?[ _-]?s[ _-]?new|new[ _-]features|change[ _-]?log|revision[ _-]history"
+    r"|(?<![a-z])readme(?![a-z])"
     r"|product[ _-]updates",
     re.IGNORECASE,
 )
@@ -121,21 +122,38 @@ async def propose_candidates(client, session: Session) -> tuple[list[Proposal], 
     return list(proposals.values()), len(toc_errors)
 
 
+def _same_proposal(session: Session, p: Proposal) -> WatchedSource | None:
+    """The row this proposal already is, matched on identity that survives URL changes."""
+    q = select(WatchedSource)
+    if p.de_article_id:
+        return session.scalars(q.where(WatchedSource.de_article_id == uuid.UUID(p.de_article_id))).first()
+    if not p.de_source_id:
+        return None
+    # Whole sources move on version bumps; index branches change URL when a newer release is added on top.
+    q = q.where(WatchedSource.de_source_id == uuid.UUID(p.de_source_id),
+                WatchedSource.discovery_reason == p.reason, WatchedSource.de_article_id.is_(None))
+    if p.reason == "toc":
+        q = q.where(WatchedSource.title == p.title)
+    return session.scalars(q).first()
+
+
 def upsert_proposals(session: Session, proposals: list[Proposal]) -> dict[str, int]:
-    counts = {"new": 0, "existing": 0, "moved": 0, "skipped_rejected": 0}
+    counts = {"new": 0, "existing": 0, "moved": 0, "skipped_rejected": 0, "conflict": 0}
     walled = {str(s.de_id) for s in session.scalars(
         select(CatalogSource).where(CatalogSource.auth_realm_id.is_not(None)))}
     for p in proposals:
         key = normalize_url(p.url)
-        row = None
-        if p.de_article_id:
-            row = session.scalars(select(WatchedSource).where(
-                WatchedSource.de_article_id == uuid.UUID(p.de_article_id))).first()
-            if row and row.url_key != key:
-                row.url, row.url_key = p.url, key
-                counts["moved"] += 1
+        at_key = session.scalars(select(WatchedSource).where(WatchedSource.url_key == key)).first()
+        row = _same_proposal(session, p)
+        if row and row.url_key != key:
+            if at_key:  # another row already owns the new URL; leave both as they are
+                counts["conflict"] += 1
                 continue
-        row = row or session.scalars(select(WatchedSource).where(WatchedSource.url_key == key)).first()
+            row.url, row.url_key = p.url, key
+            session.flush()
+            counts["moved"] += 1
+            continue
+        row = row or at_key
         if row:
             counts["skipped_rejected" if row.state == "rejected" else "existing"] += 1
             continue

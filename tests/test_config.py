@@ -47,3 +47,13 @@ def test_default_exclusions(monkeypatch):
     assert "Veeam Kasten for Kubernetes" not in settings.excluded_products
     assert "Veeam Backup & Replication" in settings.excluded_products
     assert len(settings.excluded_products) == 6
+
+
+def test_validation_error_hides_secret_values():
+    import pydantic
+    try:
+        Settings(docextractor_api_key="dxk_FAKEENVKEY", openrouter_api_key="sk-or-FAKE")  # no database_url
+    except pydantic.ValidationError as exc:
+        assert "dxk_FAKEENVKEY" not in str(exc) and "sk-or-FAKE" not in str(exc)
+    else:
+        raise AssertionError("expected a ValidationError")

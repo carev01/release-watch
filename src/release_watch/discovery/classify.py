@@ -17,6 +17,7 @@ from release_watch.models import WatchedSource
 
 LLM_TEXT_CHARS = 12_000
 MAX_PARALLEL = 8
+THIN_TEXT_CHARS = 200
 
 SYSTEM_PROMPT = """You classify vendor documentation pages for a service that watches release notes.
 A page counts as release notes when its main purpose is to list product releases or changes over time:
@@ -69,6 +70,9 @@ async def label_candidate(source: WatchedSource, fetcher, llm) -> Label:
     if result.outcome == "error":
         return Label("unsure", source.kind, "fetch_failed", "")
 
+    if "pdf" in result.content_type.lower() or result.text.startswith("%PDF"):
+        return Label("unsure", source.kind, "pdf_unparsed", "")
+
     if looks_like_feed(result):
         feed = feedparser.parse(result.text)
         if feed.entries:
@@ -76,6 +80,8 @@ async def label_candidate(source: WatchedSource, fetcher, llm) -> Label:
         return Label("unsure", "feed", "empty_feed", "")
 
     text = extract_text(result.text, source.url)
+    if len(text) < THIN_TEXT_CHARS:  # a JS shell or search widget, not something the LLM can judge
+        return Label("unsure", source.kind, "thin_text", text[:200])
     user = json.dumps({"vendor": source.vendor_name, "title": source.title, "url": source.url,
                        "text": text[:LLM_TEXT_CHARS]}, ensure_ascii=False)
     try:

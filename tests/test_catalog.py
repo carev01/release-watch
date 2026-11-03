@@ -51,3 +51,15 @@ async def test_kasten_not_excluded(session_factory):
         one = s.scalars(select(CatalogProduct).where(CatalogProduct.name == "Veeam ONE")).one()
     assert kasten.excluded is False
     assert one.excluded is True
+
+
+async def test_sync_refuses_to_deactivate_most_of_catalog(session_factory):
+    with session_factory() as s:
+        await sync_catalog(FakeDocExtractor(), s, DEFAULT_EXCLUDED_PRODUCTS, T0)
+    shrunk = FakeDocExtractor()
+    shrunk.catalog["sources"] = shrunk.catalog["sources"][:1]
+    with session_factory() as s:
+        with pytest.raises(DocExtractorError, match="sources"):
+            await sync_catalog(shrunk, s, DEFAULT_EXCLUDED_PRODUCTS, T0 + timedelta(days=1))
+    with session_factory() as s:
+        assert all(r.active for r in s.scalars(select(CatalogSource)))

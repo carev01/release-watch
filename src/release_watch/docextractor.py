@@ -63,8 +63,10 @@ class DocExtractorClient:
             page = await self._get(path, {"skip": len(items), "limit": PAGE_LIMIT})
             batch = page[key]
             items.extend(batch)
-            if not batch or len(items) >= page["total"]:
+            if len(items) >= page["total"]:
                 return items
+            if not batch:
+                raise DocExtractorError(f"GET {path}: short read, got {len(items)} of {page['total']}")
 
     async def list_vendors(self) -> list[dict]:
         return await self._list_all("/vendors", "vendors")

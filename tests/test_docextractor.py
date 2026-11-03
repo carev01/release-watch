@@ -66,3 +66,14 @@ async def test_4xx_not_retried():
     assert route.call_count == 1
     assert KEY not in str(err.value)
     assert "401" in str(err.value)
+
+
+@respx.mock
+async def test_short_pagination_read_raises():
+    respx.get(f"{BASE}/sources").mock(side_effect=[
+        httpx.Response(200, json={"sources": [{"id": 1}], "total": 3}),
+        httpx.Response(200, json={"sources": [], "total": 3}),
+    ])
+    async with client() as c:
+        with pytest.raises(DocExtractorError, match="1 of 3"):
+            await c.list_sources()

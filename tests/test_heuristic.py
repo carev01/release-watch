@@ -124,3 +124,51 @@ async def test_login_walled_flagged(session_factory):
     with session_factory() as s:
         upsert_proposals(s, [_proposal("https://help.zerto.com/rn")])
         assert s.scalars(select(WatchedSource)).one().login_walled is True
+
+
+def test_release_pattern_variants():
+    from release_watch.discovery.heuristic import RELEASE_PATTERN
+    for text in ("What’s New in 8.0", "whats-new", "/docs/what-s-new.html", "What's new", "Readme"):
+        assert RELEASE_PATTERN.search(text), text
+    assert not RELEASE_PATTERN.search("Understanding readMetadata issues")
+
+
+async def test_upsert_moved_onto_existing_key_is_conflict(session_factory):
+    await seeded(session_factory, FakeDocExtractor())
+    article = str(uuid.uuid4())
+    with session_factory() as s:
+        upsert_proposals(s, [_proposal("https://docs.x.com/11.44/rn", article),
+                             _proposal("https://docs.x.com/11.46/rn")])
+        counts = upsert_proposals(s, [_proposal("https://docs.x.com/11.46/rn", article)])
+        assert s.scalar(select(func.count()).select_from(WatchedSource)) == 2
+    assert counts["conflict"] == 1
+
+
+async def test_source_name_row_follows_base_url_move(session_factory):
+    fake = FakeDocExtractor()
+    await seeded(session_factory, fake)
+    with session_factory() as s:
+        upsert_proposals(s, (await propose_candidates(fake, s))[0])
+    fake.catalog["sources"][0]["base_url"] = "https://help.zerto.com/rn-10.9"
+    await seeded(session_factory, fake)
+    with session_factory() as s:
+        counts = upsert_proposals(s, (await propose_candidates(fake, s))[0])
+        rows = s.scalars(select(WatchedSource).where(WatchedSource.de_source_id == uuid.UUID(ZERTO_RN))).all()
+    assert [r.url for r in rows] == ["https://help.zerto.com/rn-10.9"]
+    assert counts["moved"] == 1
+
+
+async def test_toc_branch_row_follows_new_first_child(session_factory):
+    def tree(first):
+        return {ZERTO_ADMIN: [toc_entry("Release Notes", None, [
+            toc_entry(f"10.{i}", f"https://help.zerto.com/admin/rn/10.{i}") for i in range(first, 3, -1)])]}
+    fake = FakeDocExtractor(tocs=tree(4))
+    await seeded(session_factory, fake)
+    with session_factory() as s:
+        upsert_proposals(s, (await propose_candidates(fake, s))[0])
+    fake.tocs = tree(5)
+    with session_factory() as s:
+        upsert_proposals(s, (await propose_candidates(fake, s))[0])
+        rows = s.scalars(select(WatchedSource).where(WatchedSource.de_source_id == uuid.UUID(ZERTO_ADMIN))).all()
+    assert len(rows) == 1
+    assert rows[0].url == "https://help.zerto.com/admin/rn/10.5"
