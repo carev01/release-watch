@@ -53,3 +53,9 @@ def test_falls_back_to_body_without_chrome():
             + "</p></div><footer>Foot</footer></body></html>")
     md = extract_markdown(html, URL)
     assert md.startswith("## October 1, 2026") and "Menu" not in md and "Foot" not in md
+
+
+def test_deeply_nested_html_does_not_crash():
+    html = "<div>" * 3000 + "<h2>October 1, 2026</h2><p>Deep text.</p>" + "</div>" * 3000
+    md = html_to_markdown(html)
+    assert "October 1, 2026" in md and "Deep text." in md

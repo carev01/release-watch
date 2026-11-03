@@ -24,7 +24,11 @@ CHROME_SELECTORS = "nav, header, footer, aside, script, style, noscript, form"
 
 
 def html_to_markdown(fragment: str) -> str:
-    return markdownify(fragment, heading_style="ATX", bullets="*").strip()
+    try:
+        return markdownify(fragment, heading_style="ATX", bullets="*").strip()
+    except RecursionError:  # pathologically nested markup: keep the words, lose the formatting
+        root = LexborHTMLParser(fragment).root
+        return root.text(separator="\n", strip=True) if root else ""
 
 
 def extract_markdown(html: str, url: str, selector: str | None = None) -> str:

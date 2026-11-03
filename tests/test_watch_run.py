@@ -184,3 +184,20 @@ async def test_dry_run_writes_nothing(session_factory, capsys):
     with session_factory() as s:
         assert list(s.scalars(select(Entry))) == [] and list(s.scalars(select(FetchAttempt))) == []
     assert "october 14, 2026" in capsys.readouterr().out
+
+
+class BrokenFetcher(ScriptedFetcher):
+    async def fetch(self, url):
+        if url == "https://x.com/boom":
+            raise RecursionError("too deep")
+        return await super().fetch(url)
+
+
+async def test_one_source_crash_does_not_stop_the_run(session_factory):
+    add_source(session_factory)
+    add_source(session_factory, url="https://x.com/boom")
+    counts = await run(session_factory, BrokenFetcher({URL: html_page(URL, DAY1)}))
+    assert counts["baseline"] == 1 and counts["error"] == 1
+    with session_factory() as s:
+        details = set(s.scalars(select(FetchAttempt.detail)))
+    assert "crash: RecursionError" in details

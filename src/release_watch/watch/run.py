@@ -88,7 +88,10 @@ async def run_watch(session_factory, fetcher, llm, *, confirm_delay: float, now:
 
     async def read(src):
         async with gate_sem:
-            return await read_source(src, fetcher)
+            try:
+                return await read_source(src, fetcher)
+            except Exception as exc:  # one broken page must not stop the run; it shows as an error
+                return ReadResult("error", f"crash: {type(exc).__name__}")
 
     started = now()
     results = await asyncio.gather(*(read(src) for src in sources))
