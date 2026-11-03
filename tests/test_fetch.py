@@ -167,3 +167,8 @@ async def test_body_too_large(monkeypatch):
     async with Fetcher(settings(), policies=fast_policies()) as f:
         r = await f.fetch("https://a.com/big")
     assert (r.outcome, r.reason) == ("error", "too_large")
+
+
+def test_dell_is_fetched_one_at_a_time_and_slowly():
+    p = policy_for("www.dell.com", DEFAULT_HOST_POLICIES)
+    assert (p.max_concurrency, p.min_delay_ms) == (1, 3000)

@@ -577,3 +577,692 @@ news_sources:
   url: https://www.rubrik.com/blog
   kind: listing
   notes: Static HTML blog listing, no RSS. Mostly thought-leadership.
+
+# Per-source watch configuration (selectors, split rules, newest-child rules, pins), applied to existing
+# sources by URL. Each item's comment records what a live read gave when it was tuned.
+source_config:
+# --- IBM, Red Hat, Atempo, Acronis, Arctera, Dell, HYCU, Commvault, Microsoft, Storware, Bacula, Trilio (verified live 2026-11-03) ---
+# 39 versions, newest "6.3.19"
+- url: https://www.ibm.com/docs/api/v1/product/csm?lang=en
+  kind: index_page
+  follow:
+    pick:
+      type: versions
+      json_path: taxonomy.versions.*.version
+# 24 versions, newest "2.3.2"
+- url: https://www.ibm.com/docs/api/v1/product/scdm?lang=en
+  kind: index_page
+  follow:
+    pick:
+      type: versions
+      json_path: taxonomy.versions.*.version
+# 30 versions, newest "8.2.2"
+- url: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+  kind: index_page
+  follow:
+    pick:
+      type: versions
+      json_path: taxonomy.versions.*.version
+# 1 whole-page entry (5271 chars); pinned to 2.3.1
+- url: https://www.ibm.com/docs/en/scdm/2.3.1?topic=whats-new
+  split_rule:
+    whole: true
+    key: what's new
+  follow:
+    pin:
+      version: 2.3.1
+      signal: https://www.ibm.com/docs/api/v1/product/scdm?lang=en
+      successor: https://www.ibm.com/docs/en/scdm/{version}?topic=whats-new
+# 1 whole-page entry (1590 chars); pinned to 2.3.1
+- url: https://www.ibm.com/docs/en/storage-sentinel/2.3.1?topic=whats-new
+  split_rule:
+    whole: true
+    key: what's new
+  follow:
+    pin:
+      version: 2.3.1
+      signal: https://www.ibm.com/docs/api/v1/product/scdm?lang=en
+      successor: https://www.ibm.com/docs/en/storage-sentinel/{version}?topic=whats-new
+# 1 whole-page entry (7128 chars); pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/spfd/8.2.1?topic=whats-new
+  split_rule:
+    whole: true
+    key: what's new
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/spfd/{version}?topic=whats-new
+# 1 whole-page entry (616 chars); pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/spfm/8.2.1?topic=domino-whats-new
+  split_rule:
+    whole: true
+    key: what's new
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/spfm/{version}?topic=domino-whats-new
+# 1 whole-page entry (677 chars); pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/spfm/8.2.1?topic=server-whats-new
+  split_rule:
+    whole: true
+    key: what's new
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/spfm/{version}?topic=server-whats-new
+# 1 whole-page entry (6831 chars); pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/spfm/8.2.1?topic=whats-new
+  split_rule:
+    whole: true
+    key: what's new
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/spfm/{version}?topic=whats-new
+# 1 whole-page entry (1244 chars); pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/spfsm/8.2.1?topic=whats-new
+  split_rule:
+    whole: true
+    key: what's new
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/spfsm/{version}?topic=whats-new
+# 1 whole-page entry (1287 chars); pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/spfve/8.2.1?topic=v-whats-new
+  split_rule:
+    whole: true
+    key: what's new
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/spfve/{version}?topic=v-whats-new
+# 1 whole-page entry (1251 chars); pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/spfve/8.2.1?topic=vmware-whats-new
+  split_rule:
+    whole: true
+    key: what's new
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/spfve/{version}?topic=vmware-whats-new
+# 1 whole-page entry (15237 chars); pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/spfve/8.2.1?topic=whats-new
+  split_rule:
+    whole: true
+    key: what's new
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/spfve/{version}?topic=whats-new
+# 1 whole-page entry (5295 chars); pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/sphfw/8.2.1?topic=whats-new
+  split_rule:
+    whole: true
+    key: what's new
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/sphfw/{version}?topic=whats-new
+# 1 whole-page entry (7764 chars); pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/sps/8.2.1?topic=whats-new
+  split_rule:
+    whole: true
+    key: what's new
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/sps/{version}?topic=whats-new
+# 1 whole-page entry (12293 chars); pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/storage-protect/8.2.1?topic=whats-new
+  split_rule:
+    whole: true
+    key: what's new
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/storage-protect/{version}?topic=whats-new
+# 1 whole-page entry (4490 chars); pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/spfm/8.2.1?topic=dphd-release-notes-storage-protect-mail-data-protection-hcl-domino-version-82
+  split_rule:
+    whole: true
+    key: release notes
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/spfm/{version}?topic=dphd-release-notes-storage-protect-mail-data-protection-hcl-domino-version-82
+# 1 whole-page entry (4143 chars); pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/spfm/8.2.1?topic=dpmes-release-notes-data-protection-microsoft-exchange-server-82
+  split_rule:
+    whole: true
+    key: release notes
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/spfm/{version}?topic=dpmes-release-notes-data-protection-microsoft-exchange-server-82
+# 1 whole-page entry (3137 chars); pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/spferp/8.2.1?topic=release-notes-821
+  split_rule:
+    whole: true
+    key: release notes
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/spferp/{version}?topic=release-notes-{version_compact}
+# 5 entries, newest "New in IBM Storage Protect Snapshot 8.2.1"; pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/sps/8.2.1?topic=linux-whats-new-custom-applications
+  split_rule:
+    heading_regex: ^New in IBM
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/sps/{version}?topic=linux-whats-new-custom-applications
+# 5 entries, newest "New in IBM Storage Protect Snapshot 8.2.1"; pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/sps/8.2.1?topic=linux-whats-new-db2
+  split_rule:
+    heading_regex: ^New in IBM
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/sps/{version}?topic=linux-whats-new-db2
+# 5 entries, newest "New in IBM Storage Protect Snapshot 8.2.1"; pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/sps/8.2.1?topic=linux-whats-new-oracle
+  split_rule:
+    heading_regex: ^New in IBM
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/sps/{version}?topic=linux-whats-new-oracle
+# 5 entries, newest "New in IBM Storage Protect Snapshot 8.2.1"; pinned to 8.2.1
+- url: https://www.ibm.com/docs/en/sps/8.2.1?topic=linux-whats-new-oracle-sap
+  split_rule:
+    heading_regex: ^New in IBM
+  follow:
+    pin:
+      version: 8.2.1
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/sps/{version}?topic=linux-whats-new-oracle-sap
+# 1 whole-page entry (2031 chars)
+- url: https://www.ibm.com/docs/en/storage-defender/base?topic=whats-new
+  split_rule:
+    whole: true
+    key: what's new
+# 11 versions, newest "7.4"
+- url: https://documentation.atempo.com/products-lifecycle-1/product-end-of-support-policies/lina-lifecycle.md
+  kind: index_page
+  follow:
+    pick:
+      type: versions
+      regex: \|\s*\W+\s*Lina (\d+(?:\.\d+)+)
+# 14 versions, newest "4.6"
+- url: https://documentation.atempo.com/products-lifecycle-1/product-end-of-support-policies/miria-lifecycle.md
+  kind: index_page
+  follow:
+    pick:
+      type: versions
+      regex: \|\s*\W+\s*Miria (\d+(?:\.\d+)+)
+# 17 versions, newest "4.9.5"
+- url: https://documentation.atempo.com/products-lifecycle-1/product-end-of-support-policies/tina-lifecycle.md
+  kind: index_page
+  follow:
+    pick:
+      type: versions
+      regex: \|\s*\W+\s*Tina (\d+(?:\.\d+)+)
+# 1 children, newest "Lina 7.4"; pinned to 7.4
+- url: https://documentation.atempo.com/lina-7.4/lina-7.4-en/release-information/release-notes
+  kind: index_page
+  follow:
+    mode: entry
+    pick:
+      type: links
+      href_regex: /release-information/release-notes/lina-[0-9.]+$
+    pin:
+      version: '7.4'
+      signal: https://documentation.atempo.com/products-lifecycle-1/product-end-of-support-policies/lina-lifecycle.md
+      successor: https://documentation.atempo.com/lina-{version}/lina-{version}-en/release-information/release-notes
+# 3 entries, newest "Version 4.6.1.0"; pinned to 4.6
+- url: https://documentation.atempo.com/miria-4.6/reference-documentation/changelogs
+  follow:
+    pin:
+      version: '4.6'
+      signal: https://documentation.atempo.com/products-lifecycle-1/product-end-of-support-policies/miria-lifecycle.md
+      successor: https://documentation.atempo.com/miria-{version}/reference-documentation/changelogs
+# 1 whole-page entry (26669 chars); pinned to 4.6
+- url: https://documentation.atempo.com/miria-4.6/reference-documentation/release-note
+  split_rule:
+    whole: true
+    key: release notes
+  follow:
+    pin:
+      version: '4.6'
+      signal: https://documentation.atempo.com/products-lifecycle-1/product-end-of-support-policies/miria-lifecycle.md
+      successor: https://documentation.atempo.com/miria-{version}/reference-documentation/release-note
+# 1 whole-page entry (14334 chars); pinned to 4.9.5
+- url: https://documentation.atempo.com/tina-4.9.5/tina-4.9.5-en/version-information/release-notes
+  split_rule:
+    whole: true
+    key: release notes
+  follow:
+    pin:
+      version: 4.9.5
+      signal: https://documentation.atempo.com/products-lifecycle-1/product-end-of-support-policies/tina-lifecycle.md
+      successor: https://documentation.atempo.com/tina-{version}/tina-{version}-en/version-information/release-notes
+# 26 versions, newest "26.10.43461"
+- url: https://dl.acronis.com/u/baas/rn/agent/en-US/AcronisCyberProtectionAgent_relnotes.htm
+  kind: index_page
+  follow:
+    pick:
+      type: versions
+      regex: Version\s+(\d+\.\d+\.\d+)
+# 3 versions, newest "17"
+- url: https://www.acronis.com/en/support/documentation/
+  kind: index_page
+  follow:
+    pick:
+      type: versions
+      regex: managed-protection\.com/u/cyberprotect/rn/(\d+)/
+# 2 entries, newest "What's new in Acronis Cyber Protect 17 Update 1"; pinned to 17
+- url: https://dl.managed-protection.com/u/cyberprotect/rn/17/user/en-US/AcronisCyberProtect17_relnotes.htm
+  split_rule:
+    heading_regex: ^What.s new in Acronis
+  follow:
+    pin:
+      version: '17'
+      signal: https://www.acronis.com/en/support/documentation/
+      successor: https://dl.managed-protection.com/u/cyberprotect/rn/{version_major}/user/en-US/AcronisCyberProtect{version_major}_relnotes.htm
+# 12 versions, newest "20.3"
+- url: https://www.dell.com/support/kbdoc/en-us/000196987/dell-powerprotect-data-manager-info-hub-product-documents-and-information
+  kind: index_page
+  follow:
+    pick:
+      type: versions
+      regex: Data Manager (\d+\.\d+)\s+Documentation Set
+# 3 versions, newest "19.12"
+- url: https://www.dell.com/support/kbdoc/en-us/000287523/dell-avamar-info-hub
+  kind: index_page
+  follow:
+    pick:
+      type: versions
+      regex: Dell Avamar (\d+\.\d+) Info Hub
+# 1 whole-page entry (18956 chars)
+- url: https://www.dell.com/support/kbdoc/en-us/000415792/dell-networker-19-14-info-hub
+  selector: '#tabcontent'
+  split_rule:
+    whole: true
+    key: networker 19.14 info hub
+# 7 versions, newest "1.6"
+- url: https://access.redhat.com/product-life-cycles/api/v1/products?name=OpenShift%20API%20for%20Data%20Protection
+  kind: index_page
+  follow:
+    pick:
+      type: versions
+      json_path: data.*.versions.*.name
+# 44 children, newest "Satori Data Access Controller v1.2644"
+- url: https://documentation.commvault.com/11.46/software/release_notes.html
+  kind: index_page
+  follow:
+    mode: entry
+    child_selector: article
+    pick:
+      type: links
+      href_regex: /\d{4}_releases\.html$
+      number_regex: (\d{4})
+    newest: max_number
+    then:
+      pick:
+        type: links
+        href_regex: /satori_data_access_controller_v[0-9_]+\.html$
+# 11 children, newest "Release Notes for Bacula Enterprise 18.2"
+- url: https://docs.baculasystems.com/BEReleaseNotes/index.html
+  kind: index_page
+  follow:
+    pick:
+      type: links
+      href_regex: /EnterpriseReleaseNotes/index\.html$
+    then:
+      pick:
+        type: links
+        href_regex: /EnterpriseReleaseNotes/RN\d+\.\d+/index\.html$
+# 43 entries, newest "Vaulted backup support for Azure Cosmos DB is now generally available"
+- url: https://learn.microsoft.com/en-us/azure/backup/whats-new
+  split_rule:
+    heading_regex: ^(?!(what.s new in azure backup|in this article|updates summary|next steps|feedback|additional resources)$)
+# 8 entries, newest "What's new in MABS V4 Update Rollup 2"
+- url: https://learn.microsoft.com/en-us/azure/backup/backup-mabs-whats-new-mabs
+  split_rule:
+    heading_regex: ^What.s new in MABS
+# 1 whole-page entry (7126 chars)
+- url: https://docs.storware.eu/
+  split_rule:
+    whole: true
+    key: what's new
+# 2 entries, newest "5.4.1"
+- url: https://docs.trilio.io/kubernetes/overview/release-notes
+  split_rule:
+    heading_regex: ^\W*\d+\.\d+\.\d+\W*$
+
+# Arctera: versions read from the raw data-items markup (pick raw: true).
+- url: https://docs.backupexec.com/us/en/backupexec-userdocs/release-notes/all-platforms/backup-exec-readme.html
+  kind: index_page
+  follow: {pick: {type: versions, raw: true, regex: "backup-exec-readme/(\\d+-\\d+)/"}}
+- url: https://docs.backupexec.com/us/en/sr-userdocs/release-notes/all-platforms/arctera-system-recovery-24-readme.html
+  kind: index_page
+  follow: {pick: {type: versions, raw: true, regex: "arctera-system-recovery-24-readme/(\\d+-\\d+)/"}}
+- url: https://docs.backupexec.com/us/en/backupexec-userdocs/release-notes/all-platforms/backup-exec-readme/25-1/backup-exec-251-readme.html
+  follow: {pin: {version: "25-1", signal: "https://docs.backupexec.com/us/en/backupexec-userdocs/release-notes/all-platforms/backup-exec-readme.html", successor: "https://docs.backupexec.com/us/en/backupexec-userdocs/release-notes/all-platforms/backup-exec-readme/{version}/backup-exec-{version_compact}-readme.html"}}
+- url: https://docs.backupexec.com/us/en/sr-userdocs/release-notes/all-platforms/arctera-system-recovery-24-readme/24-1/arcteratm-system-recovery-24-1-readme.html
+  follow: {pin: {version: "24-1", signal: "https://docs.backupexec.com/us/en/sr-userdocs/release-notes/all-platforms/arctera-system-recovery-24-readme.html", successor: "https://docs.backupexec.com/us/en/sr-userdocs/release-notes/all-platforms/arctera-system-recovery-24-readme/{version}/arcteratm-system-recovery-{version}-readme.html"}}
+# --- Datto, Spanning, Unitrends, Arcserve, Cohesity, CloudCasa, GRAX, Flosum, Nakivo, Druva, Barracuda, Portworx, Keepit (verified live 2026-11-03) ---
+# 11 entries, newest "Device Version 5.7.9 - August 6, 2026"
+- url: "https://continuity.datto.com/help/Content/kb/DBMA/DBMA-DeviceReleaseNotes.htm"
+  split_rule: {"heading_regex": "(19|20)\\d{2}\\s*$"}
+# 8 entries, newest "Device Version 5.7.8 - Jul 23, 2026"
+- url: "https://continuity.datto.com/help/Content/kb/DEBPC/DEBPC-DeviceReleaseNotes.htm"
+  split_rule: {"heading_regex": "(19|20)\\d{2}\\s*$"}
+# 5 entries, newest "Device Version 5.7.9 - August 6, 2026"
+- url: "https://continuity.datto.com/help/Content/kb/DEBS/KB360001146546.htm"
+  split_rule: {"heading_regex": "(19|20)\\d{2}\\s*$"}
+# 3 entries, newest "Device Version 5.7.8 - Jul 23, 2026"
+- url: "https://continuity.datto.com/help/Content/kb/EB/EB-DeviceReleaseNotes.htm"
+  split_rule: {"heading_regex": "(19|20)\\d{2}\\s*$"}
+# 38 children, newest "Endpoint Backup v2 v1.15.5 – October 27, 2026"; mode entry (one child page per release)
+- url: "https://continuity.datto.com/help/Content/kb/EB2/EB2-release-notes.htm"
+  kind: "index_page"
+  follow: {"mode": "entry", "pick": {"type": "links", "selector": "#mc-main-content", "href_regex": "/kb/EB2/releases/release-notes-[a-z0-9-]+\\.htm$"}}
+# 4 children, newest "Datto Backup for Microsoft Entra ID – July 2026"; mode entry (one child page per release)
+- url: "https://continuity.datto.com/help/Content/kb/Entra/entra-release-notes.htm"
+  follow: {"mode": "entry", "pick": {"type": "links", "selector": "#mc-main-content", "href_regex": "/kb/Entra/releases/entra-rn-[a-z]+-\\d{4}\\.htm$"}}
+# 20 children, newest "SIRIS 5 and ALTO 4 Firmware Release Notes"
+- url: "https://continuity.datto.com/help/Content/kb/UnifiedBackup/releaseNotes-Landing.htm"
+  follow: {"pick": {"type": "links", "selector": "#mc-main-content table", "href_regex": "continuity\\.datto\\.com/help/Content/kb/"}}
+# 1 entries, newest "Current release"; workaround: release dates are MadCap dropdown hotspots, not headings, so only the 'Current release' section is one entry
+- url: "https://help.spanning.kaseya.com/help/Content/K-Span-365/release-notes.htm"
+  split_rule: {"heading_regex": "^current release$"}
+# 1 entries, newest "Current release"; workaround: release dates are MadCap dropdown hotspots, not headings, so only the 'Current release' section is one entry
+- url: "https://help.spanning.kaseya.com/help/Content/K-Span-Google-Workspace/GW-release-notes.htm"
+  split_rule: {"heading_regex": "^current release$"}
+# 1 entries, newest "Current release"; workaround: release dates are MadCap dropdown hotspots, not headings, so only the 'Current release' section is one entry
+- url: "https://help.spanning.kaseya.com/help/Content/K-Span-SF/SF-release-notes.htm"
+  split_rule: {"heading_regex": "^current release$"}
+# 45 children, newest "11.2.0-3 – October 28, 2026"; mode entry (one child page per release)
+- url: "https://help.unitrends.kaseya.com/help/Content/Satori/release-notes.htm"
+  kind: "index_page"
+  follow: {"mode": "entry", "pick": {"type": "links", "selector": "#mc-main-content", "href_regex": "/Satori/release-notes/release-notes-[\\d-]+\\.htm$"}}
+# 46 children, newest "2.114-2 – October 29, 2026"; mode entry (one child page per release)
+- url: "https://help.unitrends.kaseya.com/uniview-help/Content/MSP/release-notes.htm"
+  kind: "index_page"
+  follow: {"mode": "entry", "pick": {"type": "links", "selector": "#mc-main-content", "href_regex": "/MSP/release-notes/release[-_]notes-[\\d-]+\\.htm$"}}
+# 8 versions, newest "11.0"; versions pick restricted to the Arcserve UDP row (pin signal for the UDP 11.0 pages)
+- url: "https://documentation.arcserve.com/Content/DocBookshelf.htm"
+  follow: {"pick": {"type": "versions", "regex": "(?<![\\d.])(\\d+\\.\\d+)(?![\\d.])(?=(?:(?!Arcserve Backup|Arcserve RHA)[\\s\\S])*Arcserve ShadowProtect)"}}
+# 1 entries, newest "udp 11.0 new features and enhancements"; one entry + pin to 11.0 (template filled with 11.0 gives this URL)
+- url: "https://documentation.arcserve.com/Arcserve-UDP/Available/11.0/ENU/Bookshelf_Files/HTML/SolG/UDPSolnGuide/udp_new_features_list.htm"
+  split_rule: {"whole": true, "key": "udp 11.0 new features and enhancements"}
+  follow: {"pin": {"version": "11.0", "signal": "https://documentation.arcserve.com/Content/DocBookshelf.htm", "successor": "https://documentation.arcserve.com/Arcserve-UDP/Available/{version}/ENU/Bookshelf_Files/HTML/SolG/UDPSolnGuide/udp_new_features_list.htm"}}
+# 1 entries, newest "udp 11.0 linux agent enhancements"; one entry + pin to 11.0 (template filled with 11.0 gives this URL)
+- url: "https://documentation.arcserve.com/Arcserve-UDP/Available/11.0/ENU/Bookshelf_Files/HTML/SolG/UDPSolnGuide/udp_new_features_linux.htm"
+  split_rule: {"whole": true, "key": "udp 11.0 linux agent enhancements"}
+  follow: {"pin": {"version": "11.0", "signal": "https://documentation.arcserve.com/Content/DocBookshelf.htm", "successor": "https://documentation.arcserve.com/Arcserve-UDP/Available/{version}/ENU/Bookshelf_Files/HTML/SolG/UDPSolnGuide/udp_new_features_linux.htm"}}
+# 1 entries, newest "udp 11.0 security and third-party updates"; one entry + pin to 11.0 (template filled with 11.0 gives this URL)
+- url: "https://documentation.arcserve.com/Arcserve-UDP/Available/11.0/ENU/Bookshelf_Files/HTML/SolG/UDPSolnGuide/udp_new_features_secrty_thrd_party.htm"
+  split_rule: {"whole": true, "key": "udp 11.0 security and third-party updates"}
+  follow: {"pin": {"version": "11.0", "signal": "https://documentation.arcserve.com/Content/DocBookshelf.htm", "successor": "https://documentation.arcserve.com/Arcserve-UDP/Available/{version}/ENU/Bookshelf_Files/HTML/SolG/UDPSolnGuide/udp_new_features_secrty_thrd_party.htm"}}
+# 3 entries, newest "What's New in Version 6.7.00"
+- url: "https://documentation.campus.barracuda.com/wiki/spaces/BBSv42/pages/7110715/What+s+New+in+Barracuda+Backup"
+  selector: "#main-content"
+# 14 entries, newest "What's New in Cloud-to-Cloud Backup (October 22, 2026)"
+- url: "https://documentation.campus.barracuda.com/wiki/spaces/BCCB/pages/3244108/Release+Notes"
+  selector: "#main-content"
+# 27 entries, newest "What’s New in the October 7, 2026 Release"
+- url: "https://documentation.campus.barracuda.com/wiki/spaces/BDI/pages/4325490/Release+Notes"
+  selector: "#main-content"
+# 6 entries, newest "What's New in Version 5.5.4"
+- url: "https://documentation.campus.barracuda.com/wiki/spaces/BMAv31/pages/5701706/Release+Notes"
+  selector: "#main-content"
+# 3 children, newest "January 2025"
+- url: "https://documentation.campus.barracuda.com/wiki/spaces/ECHO/pages/4981106/Intronis+Backup+Release+Notes"
+  follow: {"pick": {"type": "links", "selector": "#main-content", "href_regex": "/wiki/spaces/ECHO/pages/\\d+"}}
+# 27 children, newest "Feature Update September 2026"; mode entry (one child page per release)
+- url: "https://docs.cloudcasa.io/help/relnotes.html"
+  kind: "index_page"
+  follow: {"mode": "entry", "pick": {"type": "links", "href_regex": "/help/relnotes-\\d{2}-\\d{4}\\.html$"}}
+# 13 children, newest "October 2026 Release Notes"; mode entry (one child page per release)
+- url: "https://documentation.grax.com/notices"
+  kind: "index_page"
+  follow: {"mode": "entry", "child_selector": "main .whitespace-pre-wrap", "pick": {"type": "links", "href_regex": "/notices/application-release-notes/[a-z]+-\\d{4}-release-notes$"}}
+# 25 children, newest ""; mode entry (one child page per release)
+- url: "https://docs.flosum.com/release-notes/backup-and-archive/monthly-releases"
+  kind: "index_page"
+  follow: {"mode": "entry", "child_selector": "main .whitespace-pre-wrap", "pick": {"type": "links", "href_regex": "/monthly-releases/backup-and-archive-v[\\d.]+-monthly-release-notes$"}}
+# 3 children, newest ""; mode entry (one child page per release)
+- url: "https://docs.flosum.com/release-notes/backup-and-archive/seasonal-releases"
+  kind: "index_page"
+  follow: {"mode": "entry", "child_selector": "main .whitespace-pre-wrap", "pick": {"type": "links", "href_regex": "/seasonal-releases/backup-and-archive-[a-z]+-\\d{4}-v[\\d.]+-seasonal-release-notes$"}}
+# 1 entries, newest "flex appliance 8.0 release notes"; chapter ToC page as one entry; no pin possible (doc IDs in URL change per version)
+- url: "https://docs.cohesity.com/docs/flexappliances/8.0/130821112-173888505-0/v149112977-173888505"
+  selector: "article"
+  split_rule: {"whole": true, "key": "flex appliance 8.0 release notes"}
+# 1 entries, newest "flex appliances 8.0 netbackup 10.4.0.1 application release notes"; chapter ToC page as one entry; no pin possible (doc IDs in URL change per version)
+- url: "https://docs.cohesity.com/docs/flexappliances/8.0/141196447-174091128-0/v149480710-174091128"
+  selector: "article"
+  split_rule: {"whole": true, "key": "flex appliances 8.0 netbackup 10.4.0.1 application release notes"}
+# 1 entries, newest "about netbackup 11.2.0.1"; chapter ToC page as one entry; no pin possible (doc IDs in URL change per version)
+- url: "https://docs.cohesity.com/docs/netbackup/11.2.0.1/103228346-173151032-0"
+  selector: "article"
+  split_rule: {"whole": true, "key": "about netbackup 11.2.0.1"}
+# 1 entries, newest "it analytics 11.8 introduction"; chapter ToC page as one entry; no pin possible (doc IDs in URL change per version)
+- url: "https://docs.cohesity.com/docs/netbackupitanalytics/11.8/149597085-171083363-0"
+  selector: "article"
+  split_rule: {"whole": true, "key": "it analytics 11.8 introduction"}
+# 1 entries, newest "resiliency platform 10.3 release overview"; chapter ToC page as one entry; no pin possible (doc IDs in URL change per version)
+- url: "https://docs.cohesity.com/docs/resiliencyplatform/10.3/128101596-162546752-0"
+  selector: "article"
+  split_rule: {"whole": true, "key": "resiliency platform 10.3 release overview"}
+# 1 versions, newest "11.2.0.1"
+- url: "https://docs.cohesity.com/docs/netbackup"
+  follow: {"pick": {"type": "versions", "regex": "(\\d+(?:\\.\\d+)+)\\s*\\(Latest\\)"}}
+# 17 children, newest "Druva Cloud Platform Release Notes"
+- url: "https://help.druva.com/en/articles/10206884-latest-product-updates"
+  follow: {"pick": {"type": "links", "href_regex": "help\\.druva\\.com/en/articles/\\d+-[a-z0-9-]*release-notes"}}
+# 18 entries, newest "September 25, 2026"
+- url: "https://help.druva.com/en/articles/10345977-release-notes-cloud-platform"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 29 entries, newest "October 08, 2026"
+- url: "https://help.druva.com/en/articles/10346485-release-notes-cyber-resiliency"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 44 entries, newest "October 31, 2026"
+- url: "https://help.druva.com/en/articles/10390964-release-notes-endpoints"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 8 entries, newest "October 24, 2026"
+- url: "https://help.druva.com/en/articles/10867195-govcloud-release-notes-endpoints"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 9 entries, newest "October 24, 2026"
+- url: "https://help.druva.com/en/articles/10873407-govcloud-release-notes-druva-cloud-platform"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 10 entries, newest "October 24, 2026"; heading_level 1 kept: non-date L1 workload sections sit inside releases
+- url: "https://help.druva.com/en/articles/10873409-govcloud-release-notes-microsoft-365"
+  selector: ".article_body"
+  split_rule: {"heading_level": 1}
+# 6 entries, newest "October 24, 2026"; heading_level 1 kept: non-date L1 workload sections sit inside releases
+- url: "https://help.druva.com/en/articles/10873556-govcloud-release-notes-google-workspace"
+  selector: ".article_body"
+  split_rule: {"heading_level": 1}
+# 30 entries, newest "October 31, 2026"
+- url: "https://help.druva.com/en/articles/10898183-release-notes-microsoft-dynamics-365"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 16 entries, newest "October 26, 2026"; heading_level 1 kept: non-date L1 workload sections sit inside releases
+- url: "https://help.druva.com/en/articles/11721394-fedramp-release-notes-for-enterprise-workloads"
+  selector: ".article_body"
+  split_rule: {"heading_level": 1}
+# 7 entries, newest "October 24, 2026"
+- url: "https://help.druva.com/en/articles/11863898-govcloud-release-notes-cyber-resiliency"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 19 entries, newest "October 31, 2026"
+- url: "https://help.druva.com/en/articles/13165707-release-notes-okta"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 20 entries, newest "October 31, 2026"
+- url: "https://help.druva.com/en/articles/13856383-release-notes-microsoft-active-directory"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 18 entries, newest "October 31, 2026"
+- url: "https://help.druva.com/en/articles/14068031-release-notes-microsoft-power-platform"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 15 entries, newest "October 19, 2026"
+- url: "https://help.druva.com/en/articles/15388702-azure-workloads-release-notes"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 28 entries, newest "October 24, 2026"
+- url: "https://help.druva.com/en/articles/8581758-release-notes-druva-for-salesforce"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 36 entries, newest "October 31, 2026"
+- url: "https://help.druva.com/en/articles/8581929-release-notes-druva-for-microsoft-365"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 33 entries, newest "October 31, 2026"
+- url: "https://help.druva.com/en/articles/8582078-release-notes-druva-for-google-workspace"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 10 entries, newest "July 06, 2026"
+- url: "https://help.druva.com/en/articles/8651833-aws-workloads-release-notes"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 25 entries, newest "October 19, 2026"; heading_level 1 kept: non-date L1 workload sections sit inside releases
+- url: "https://help.druva.com/en/articles/8764270-enterprise-workloads-release-notes"
+  selector: ".article_body"
+  split_rule: {"heading_level": 1}
+# 21 entries, newest "October 29, 2026"
+- url: "https://help.druva.com/en/articles/8808078-release-notes-managed-services-center"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 18 entries, newest "October 31, 2026"
+- url: "https://help.druva.com/en/articles/8829600-release-notes-insync-client-insync-web"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 30 entries, newest "October 31, 2026"
+- url: "https://help.druva.com/en/articles/9561517-release-notes-microsoft-entra-id"
+  selector: ".article_body"
+  split_rule: {"heading_regex": "^[*\\s\u200b]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[*\\s]+\\d{1,2}(st|nd|rd|th)?(,?[*\\s]+\\d{4})?[*\\s]*$"}
+# 80 children, newest "v11.2.3"
+- url: "https://helpcenter.nakivo.com/Release-Notes/Content/Release-Notes.htm"
+  follow: {"pick": {"type": "links", "href_regex": "/Release-Notes/Content/v\\d+-Release-Notes/v[\\d.]+-Release-Notes\\.htm$"}}
+# 72 entries, newest "10.27.0 – Oct 22, 2026"
+- url: "https://www.keepit.com/help/product-updates/"
+  # matches the stored row with selector #updates
+  split_rule: {"heading_regex": "^\\d+\\.\\d+(\\.\\d+)?\\s*[\u2013-].*\\b(19|20)\\d{2}\\s*$"}
+  kind: "section"
+  selector: "#updates"
+# 18 entries, newest "10.24.0 – August 20, 2026"
+- url: "https://www.keepit.com/help/product-updates/"
+  # matches the stored row with selector #pmc
+  split_rule: {"heading_regex": "^\\d+\\.\\d+(\\.\\d+)?\\s*[\u2013-].*\\b(19|20)\\d{2}\\s*$"}
+  kind: "section"
+  selector: "#pmc"
+# 90 entries, newest "10.27.0 – Oct 22, 2026"
+- url: "https://www.keepit.com/help/product-updates/"
+  # matches the stored row with kind entry_page
+  split_rule: {"heading_regex": "^\\d+\\.\\d+(\\.\\d+)?\\s*[\u2013-].*\\b(19|20)\\d{2}\\s*$"}
+  kind: "entry_page"
+# 13 entries, newest "Version 3.1.1 – Released on September 08, 2026"
+- url: "https://docs.portworx.com/portworx-backup-on-prem/whats-new"
+  split_rule: {"heading_regex": "^Version\\s+\\d+(\\.\\d+)+\\s*[\u2013-]\\s*Released"}
+# --- JSON endpoints and moving targets: Synology, Gearset, CloudAlly, NinjaOne, Veeam Data Cloud, Afi, Zerto, Axcient, AvePoint, Keepit sections, Securiti (verified live 2026-11-03) ---
+# 60 entries (all_versions), newest "3.2.2-25554" (2026-10-12), body = verbatim release note HTML as Markdown
+- url: "https://www.synology.com/api/releaseNote/findChangeLog?identify=ActiveBackup&lang=en-global"
+  split_rule: {json: {items: "info.versions.DSM.all_versions", key: version, title: version, body: content, date: publish_date, body_format: html}}
+
+# 12 entries (all_versions), newest "2.0.1-88106" (2026-10-13)
+- url: "https://www.synology.com/api/releaseNote/findChangeLog?identify=APM&lang=en-global"
+  split_rule: {json: {items: "info.versions.APM.all_versions", key: version, title: version, body: content, date: publish_date, body_format: html}}
+
+# 50 entries, newest "November 3rd, 2026"; body = the day's changes as "* item" lines (list join)
+- url: "https://app.gearset.com/frontend/changelog/1"
+  split_rule: {json: {items: ChangelogItems, key: Date, title: Date, body: Changes, body_format: html}}
+
+# 21 entries, newest "August '26 Release Notes" (2026-08-17), full article body, url = html_url
+- url: "https://support.cloudally.com/api/v2/help_center/en-us/sections/360005942919/articles.json?sort_by=created_at&sort_order=desc"
+  kind: entry_page
+  split_rule: {json: {items: articles, key: id, title: title, body: body, url: html_url, date: created_at, body_format: html}}
+
+# 30 entries (page 1 of 2), newest "NinjaOne SaaS Backup Release Notes: September 2026" (2026-10-06), full article body
+- url: "https://help.dropsuite.com/api/v2/help_center/en-us/categories/21792313200023/articles.json?sort_by=created_at&sort_order=desc"
+  kind: entry_page
+  split_rule: {json: {items: articles, key: id, title: title, body: body, url: html_url, date: created_at, body_format: html}}
+
+# 1 entry ("page"). Superseded by the category JSON above (article 23196679606679 is one of its entries); kept quiet, consider retiring
+- url: "https://help.dropsuite.com/hc/en-us/articles/23196679606679-April-2024-Release-Notes"
+  split_rule: {whole: true}
+
+# 6 entries, newest "Multiple Microsoft 365 Express and Licensing Improvements" (2026-10-27), key = pageUrl (relative, so not used as url)
+- url: "https://www.veeam.com/services/change-log/list?product=vdc&offset=0&limit=6"
+  kind: entry_page
+  split_rule: {json: {items: changeLogCards, key: pageUrl, title: title, body: description, date: releaseDate, body_format: html}}
+
+# 16 children (EN only, no /de/ /fr/ /es/), includes afi-oct-2026; child page via article.md-content__inner gives the clean release text
+- url: "https://afi.ai/docs/sitemap.xml"
+  follow: {mode: entry, pick: {type: sitemap, loc_regex: "^https://afi\\.ai/docs/whats-new/afi-[a-z]{3}-\\d{4}/release-notes/$"}, child_selector: "article.md-content__inner"}
+
+# 1 entry ("page", "Afi Platform Update - Jul 2026"). Superseded by the sitemap source; whole:true keeps it quiet, consider retiring
+- url: "https://afi.ai/docs/whats-new/afi-jul-2026/release-notes/"
+  selector: "article.md-content__inner"
+  split_rule: {whole: true}
+
+# 2 children from bundle RN.HTML.10.9 (newest version by lowest position), first "Release Notes for HPE Zerto Software 10.9.10", then 10.9.01;
+# child = help-be page HTML (plain HTTP), .content-body holds the full text (What's New, Resolved Issues, Known Issues). No url_rewrite: help.zerto.com is JS-only
+- url: "https://help-be.zerto.com/api/categories"
+  follow:
+    mode: entry
+    pick: {type: json, items: "*.children[id=ReleaseNotes].subLinks", order_by: position, order: asc, title: linkText, capture: {field: route, regex: "/bundle/([^/]+)/"}, url_template: "https://help-be.zerto.com/api/bundle/{_1}/toc?language=enus"}
+    newest: first
+    then: {pick: {type: json, items: "*.childEntries", url: url, title: title}}
+    child_selector: ".content-body"
+
+# login wall: 302 to app.securiti.ai/#/?redirectToDoc=/release-notes (JS app login)
+- url: "https://docs.securiti.ai/release-notes"
+  login_walled: true
+
+# 54 children (2025 + 2026 release pages), first "September 2026 - x360Recover - v17.7.0" (_2026/035); excludes "010 Latest" and ADR pages
+- url: "https://docs.connectwise.com/x360Recover/Release_Notes"
+  follow: {mode: entry, pick: {type: links, href_regex: "/x360Recover_Release_Notes_\\d{4}/\\d+$"}, child_selector: ".mt-content-container"}
+
+# 1 entry, key "explore the avepoint cloud october 2026 release"; a new month's headline gives a new key
+- url: "https://learn.avepoint.com/solution-pages/release-notes.html"
+  kind: entry_page
+  selector: ".whatsnew-cards h3.whatsnew-card-title"
+  split_rule: {heading_regex: "(?i)release"}
+
+# 18 entries, newest "10.24.0 – August 20, 2026" (drops the TOC heading entry; selector unchanged, shown to identify the row)
+- url: "https://www.keepit.com/help/product-updates/"
+  selector: "#pmc"
+  split_rule: {heading_regex: "^\\d+\\.\\d+(\\.\\d+)?\\s*[–-]\\s*[A-Za-z]+\\.? \\d"}
+
+# 72 entries, newest "10.27.0 – Oct 22, 2026" (drops the TOC heading entry; selector unchanged, shown to identify the row)
+- url: "https://www.keepit.com/help/product-updates/"
+  selector: "#updates"
+  split_rule: {heading_regex: "^\\d+\\.\\d+(\\.\\d+)?\\s*[–-]\\s*[A-Za-z]+\\.? \\d"}

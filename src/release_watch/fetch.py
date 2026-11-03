@@ -43,6 +43,8 @@ class HostPolicy:
 DEFAULT_HOST_POLICIES: dict[str, HostPolicy] = {
     "ibm.com": HostPolicy(user_agent="curl/8.5.0"),
     "cohesity.com": HostPolicy(soft_404_markers=("ERROR_FALLBACK;404",)),
+    # Dell's KB pages answer 403 to parallel fetches.
+    "dell.com": HostPolicy(max_concurrency=1, min_delay_ms=3000),
 }
 
 
