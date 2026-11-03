@@ -5,7 +5,7 @@ image:
 
 # Created by hand, never in values (see README):
 #   RW_DOCEXTRACTOR_API_KEY, RW_AZURE_OPENAI_API_KEY, RW_AZURE_OPENAI_ENDPOINT,
-#   RW_OPENROUTER_API_KEY, POSTGRES_PASSWORD (URL-safe characters only)
+#   RW_OPENROUTER_API_KEY, RW_TEAMS_WEBHOOK_URL, POSTGRES_PASSWORD (URL-safe characters only)
 existingSecret: release-watch-secrets
 
 timezone: America/Sao_Paulo
@@ -22,6 +22,9 @@ web:
 cron:
   sync: "0 5 * * *"
   discover: "30 5 * * 1"
+  watch: "0 6 * * *"
+  digest: "0 8 * * *"
+  deadlineSeconds: 10800
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 1Gi }

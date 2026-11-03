@@ -48,6 +48,33 @@ helm upgrade --install release-watch deploy/helm/release-watch \
 
 Add `release-watch.k3s.home.lan` to DNS, pointing at the Traefik ingress.
 
+### Teams notifications (Power Automate)
+
+The daily digest (08:00) and the immediate alerts are posted to a Teams group chat through a Power Automate webhook.
+
+1. In Power Automate, create an **instant cloud flow** with the trigger **"When a Teams webhook request is received"** (Teams connector). Set *Who can trigger the flow* to **Anyone**.
+2. Add the action **"Post card in a chat or channel"**. Post as **Flow bot**, post in **Group chat**, and pick the chat.
+3. For **Adaptive Card**, use the expression `triggerBody()?['attachments']?[0]?['content']`. Release Watch sends the Teams message envelope `{"type":"message","attachments":[{"contentType":"application/vnd.microsoft.card.adaptive","content":{…}}]}`, one card per request.
+4. Save, copy the trigger's HTTP URL, and add it to the Secret. The URL carries a signature, so treat it as a password:
+
+```bash
+kubectl -n release-watch patch secret release-watch-secrets --type merge \
+  -p '{"stringData":{"RW_TEAMS_WEBHOOK_URL":"<flow URL>"}}'
+```
+
+Until the URL is set, the `digest` job fails every day with "RW_TEAMS_WEBHOOK_URL is not set". To preview the cards without sending: `kubectl -n release-watch exec deploy/release-watch-web -- release-watch digest --dry-run` (or locally, `uv run release-watch digest --dry-run`).
+
+### Daily jobs
+
+| Job | Schedule (America/Sao_Paulo) | What it does |
+|---|---|---|
+| `sync` | 05:00 daily | Mirrors DocExtractor's catalog |
+| `discover` | 05:30 Mondays | Proposes new release-notes candidates for the review queue |
+| `watch` | 06:00 daily | Reads every active source, confirms changes about 10 minutes later, gates them, writes events |
+| `digest` | 08:00 daily | Posts the summary card (versions, counts, health) and one card per new or edited entry |
+
+Every job runs `migrate` first. The first `watch` after a source becomes active only records a baseline. Held-back items wait under **Needs a look** in the web view. Per-source selectors, split rules and newest-child rules live in `seeds/sources.yaml` under `source_config:`; apply them with `release-watch seed seeds/sources.yaml`.
+
 Verify:
 
 ```bash
