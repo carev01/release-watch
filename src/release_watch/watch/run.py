@@ -301,28 +301,29 @@ async def _build_events(sf, fetcher, src, mode: str, changes: Changes) -> list[E
                                      body=body or None, url=entry.url, status=status, reason=reason))
         return events
 
-    # Version lines: index pages of per-release documents, and version pages.
+    # Version lines: index pages of per-release documents, and version pages. Only the highest new version is
+    # reported, and only if it is newer than every version the source already listed (an archived link added
+    # to an index is not a release).
     with sf() as s:
         product = s.get(CatalogProduct, src.product_de_id) if src.product_de_id else None
-        known_versions = [k.key for k in _load_state(s, src.id).known]
-    if mode == "versions":
-        candidates = [(e, st, rs) for e, st, rs in new[:1]
-                      if all(version_tuple(e.key) > version_tuple(k) for k in known_versions)]
-    else:
-        candidates = new
-    events = []
-    for entry, status, reason in candidates:
+        known = _load_state(s, src.id).known
+    known_versions = [v for v in ((k.key if mode == "versions" else _version_of(k.body)) for k in known) if v]
+    floor = max((version_tuple(v) for v in known_versions), default=())
+    events, found = [], []
+    for entry, status, reason in new:
         version = entry.key if mode == "versions" else _version_of(entry.heading, entry.url or "")
         if version is None:
             events.append(EntryEvent(id=uuid.uuid4(), source_id=src.id, kind="version", heading=entry.heading,
                                      url=entry.url, status="needs_look", reason="no_version"))
-            continue
-        if product and product.de_version and version_tuple(version) <= version_tuple(product.de_version):
-            continue
-        name = product.name if product else (src.title or src.url)
-        scope = src.product_de_id or src.id
-        events.append(EntryEvent(
-            id=uuid.uuid4(), source_id=src.id, kind="version", version=version, product_de_id=src.product_de_id,
-            heading=f"{src.vendor_name} released a new version of {name}: {version}", url=entry.url or src.url,
-            dedupe_key=f"version:{src.vendor_name}:{scope}:{version}", status=status, reason=reason))
+        elif version_tuple(version) > floor:
+            found.append((version, entry, status, reason))
+    if found:
+        version, entry, status, reason = max(found, key=lambda f: version_tuple(f[0]))
+        if not (product and product.de_version and version_tuple(version) <= version_tuple(product.de_version)):
+            name = product.name if product else (src.title or src.url)
+            scope = src.product_de_id or src.id
+            events.append(EntryEvent(
+                id=uuid.uuid4(), source_id=src.id, kind="version", version=version, product_de_id=src.product_de_id,
+                heading=f"{src.vendor_name} released a new version of {name}: {version}", url=entry.url or src.url,
+                dedupe_key=f"version:{src.vendor_name}:{scope}:{version}", status=status, reason=reason))
     return events

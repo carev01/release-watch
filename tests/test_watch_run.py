@@ -257,3 +257,29 @@ async def test_daily_drift_never_becomes_an_edit(session_factory):
     for day, page in enumerate(pages):
         await run(session_factory, ScriptedFetcher({URL: html_page(URL, page)}), now=later(24 * day))
     assert events(session_factory) == []
+
+
+async def test_index_version_mode_ignores_older_archived_links(session_factory):
+    follow = {"pick": {"type": "links", "href_regex": r"\.pdf$"}}
+    add_source(session_factory, kind="index_page", follow=follow)
+    base = '<a href="/rn_11.40.pdf">Release Notes 11.40</a>'
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, base)}))
+    archived = base + '<a href="/rn_11.0.pdf">Release Notes 11.0</a>'
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, archived)}))
+    assert events(session_factory) == []
+
+
+async def test_version_page_reports_highest_new_version_even_if_ascending(session_factory):
+    import json
+
+    from release_watch.fetch import FetchResult
+    add_source(session_factory, kind="index_page", follow={"pick": {"type": "links", "href_regex": r"rn_"}})
+
+    def page(vs):
+        html = "".join(f'<a href="/rn_{v}.pdf">Release Notes {v}</a>' for v in vs)
+        return html_page(URL, html)
+
+    await run(session_factory, ScriptedFetcher({URL: page(["11.40"])}))
+    await run(session_factory, ScriptedFetcher({URL: page(["11.40", "11.42", "11.44"])}))
+    assert [e.version for e in events(session_factory)] == ["11.44"]
+    assert json and FetchResult
