@@ -32,6 +32,18 @@ def entry_key(heading: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[#*_]+", " ", heading)).strip().casefold()
 
 
+_IMAGE_MD = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+_LINK_MD = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+
+
+def _clean_heading(text: str) -> str:
+    """Heading text without link or image markup (anchor links, copy-link icons)."""
+    text = _IMAGE_MD.sub("", text)
+    while _LINK_MD.search(text):
+        text = _LINK_MD.sub(r"\1", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def _headings(lines: list[str]) -> list[tuple[int, int, str]]:
     """(line index, level, heading text), skipping fenced code."""
     found, in_fence = [], False
@@ -42,9 +54,9 @@ def _headings(lines: list[str]) -> list[tuple[int, int, str]]:
         if in_fence:
             continue
         if m := _ATX.match(line):
-            found.append((i, len(m.group(1)), m.group(2).strip()))
+            found.append((i, len(m.group(1)), _clean_heading(m.group(2))))
         elif m := _BOLD.match(line.strip()):
-            found.append((i, BOLD_LEVEL, m.group(1).strip()))
+            found.append((i, BOLD_LEVEL, _clean_heading(m.group(1))))
     return found
 
 

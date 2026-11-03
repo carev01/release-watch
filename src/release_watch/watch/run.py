@@ -97,11 +97,12 @@ async def run_watch(session_factory, fetcher, llm, *, confirm_delay: float, now:
     counts["sources"] = len(sources)
 
     if dry_run:
+        counts = {"sources": len(sources), "ok": 0, "suspect": 0, "error": 0, "gone": 0}
         for src, r in zip(sources, results):
             keys = ", ".join(e.key for e in r.entries[:3])
             out(f"{r.outcome:7} {r.reason or '-':16} {len(r.entries):4}  {src.vendor_name} | {src.title or src.url}"
                 f" | {src.url} | {keys}")
-            counts[r.outcome if r.outcome in counts else "error"] += 1
+            counts[r.outcome] += 1
         return counts
 
     pending: list[_Pending] = []

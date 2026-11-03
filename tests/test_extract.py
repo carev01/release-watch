@@ -17,7 +17,7 @@ def test_missing_selector_returns_empty():
     assert extract_markdown("<p>x</p>", URL, "#nope") == ""
 
 
-def test_no_selector_uses_trafilatura():
+def test_no_selector_uses_main_content():
     md = extract_markdown((PAGES / "changelog.html").read_text(), URL)
     assert "# October 28, 2026" in md
     assert "Pricing" not in md
@@ -37,3 +37,19 @@ def test_normalize_strips_tokens_and_noise():
 def test_punct_insensitive_ignores_punctuation():
     assert punct_insensitive("Fixed bug.") == punct_insensitive("Fixed  bug")
     assert punct_insensitive("Fixed bug") != punct_insensitive("Fixed bugs")
+
+
+def test_main_content_preferred_over_trafilatura():
+    html = ('<html><body><nav>Menu</nav><div role="main"><h1>Notes</h1><p>' + "Intro text. " * 20 + '</p>'
+            '<h3><a name="v5"></a>Device Version 5.7.8 - Jul 23, 2026</h3><p>Fixed it.</p></div>'
+            '<footer>Footer</footer></body></html>')
+    md = extract_markdown(html, URL)
+    assert "Device Version 5.7.8 - Jul 23, 2026" in md and "Fixed it." in md
+    assert "Menu" not in md and "Footer" not in md
+
+
+def test_falls_back_to_body_without_chrome():
+    html = ("<html><body><nav>Menu</nav><div><h2>October 1, 2026</h2><p>" + "Text here. " * 40
+            + "</p></div><footer>Foot</footer></body></html>")
+    md = extract_markdown(html, URL)
+    assert md.startswith("## October 1, 2026") and "Menu" not in md and "Foot" not in md

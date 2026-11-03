@@ -16,6 +16,13 @@ _LINK_QUERY = re.compile(r"(\]\([^)\s?]+)\?[^)\s]*")
 _BARE_QUERY = re.compile(r"(https?://[^\s)?\]]+)\?[^\s)\]]*")
 
 
+# Main-content containers, most specific first. Readability extractors (trafilatura) drop headings that
+# hold anchors (MadCap Flare) and trim lists, so a real content node converted as-is is preferred.
+CONTENT_SELECTORS = ("[role=main]", "main", "article", "#mc-main-content", ".article-body", "#content")
+MIN_CONTENT_CHARS = 200
+CHROME_SELECTORS = "nav, header, footer, aside, script, style, noscript, form"
+
+
 def html_to_markdown(fragment: str) -> str:
     return markdownify(fragment, heading_style="ATX", bullets="*").strip()
 
@@ -24,12 +31,19 @@ def extract_markdown(html: str, url: str, selector: str | None = None) -> str:
     if selector:
         node = LexborHTMLParser(html).css_first(selector)
         return html_to_markdown(node.html) if node is not None else ""
-    text = trafilatura.extract(html, url=url, output_format="markdown", include_formatting=True,
-                               include_tables=True, include_links=True)
-    if text:
-        return text
-    body = LexborHTMLParser(html).body
-    return body.text(separator="\n", strip=True) if body else ""
+    tree = LexborHTMLParser(html)
+    for candidate in CONTENT_SELECTORS:
+        node = tree.css_first(candidate)
+        if node is not None and len(node.text(strip=True)) >= MIN_CONTENT_CHARS:
+            return html_to_markdown(node.html)
+    if tree.body is not None:
+        for chrome in tree.body.css(CHROME_SELECTORS):
+            chrome.decompose()
+        md = html_to_markdown(tree.body.html)
+        if md:
+            return md
+    return trafilatura.extract(html, url=url, output_format="markdown", include_formatting=True,
+                               include_tables=True, include_links=True) or ""
 
 
 def normalize(text: str) -> str:

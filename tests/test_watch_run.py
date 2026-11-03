@@ -179,7 +179,8 @@ async def test_edited_entry_event_has_diff(session_factory):
 
 async def test_dry_run_writes_nothing(session_factory, capsys):
     add_source(session_factory)
-    await run(session_factory, ScriptedFetcher({URL: html_page(URL, DAY1)}), dry_run=True)
+    counts = await run(session_factory, ScriptedFetcher({URL: html_page(URL, DAY1)}), dry_run=True)
+    assert counts == {"sources": 1, "ok": 1, "suspect": 0, "error": 0, "gone": 0}
     with session_factory() as s:
         assert list(s.scalars(select(Entry))) == [] and list(s.scalars(select(FetchAttempt))) == []
     assert "october 14, 2026" in capsys.readouterr().out

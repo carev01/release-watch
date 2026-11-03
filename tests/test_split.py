@@ -57,3 +57,11 @@ def test_heading_regex_override():
 
 def test_entry_key_strips_markup():
     assert entry_key("**Oct 2026**") == "oct 2026"
+
+
+def test_heading_text_drops_link_and_image_markup():
+    text = "### [](#v5)Device Version 5.4.5 - Jan 29, 2026 [![](copy.png)](#v5)\n\nBody"
+    [entry] = split_entries(text)
+    assert entry.heading == "Device Version 5.4.5 - Jan 29, 2026"
+    assert entry.key == "device version 5.4.5 - jan 29, 2026"
+    assert entry.body.startswith("### [](#v5)Device")
