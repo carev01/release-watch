@@ -53,3 +53,35 @@ def fast_fetcher(transport=None):
 
     settings = Settings(database_url="postgresql+psycopg://x@y/z", docextractor_api_key="k")
     return Fetcher(settings, policies={}, transport=transport, default_policy=HostPolicy(min_delay_ms=0))
+
+
+class ScriptedFetcher:
+    """Returns FetchResults per URL in order; the last one repeats. Records every URL fetched."""
+
+    def __init__(self, script: dict):
+        self.script = {url: list(v) if isinstance(v, list) else [v] for url, v in script.items()}
+        self.calls: list[str] = []
+
+    async def fetch(self, url):
+        self.calls.append(url)
+        queue = self.script[url]
+        return queue.pop(0) if len(queue) > 1 else queue[0]
+
+
+def html_page(url, body, status=200, outcome="ok", reason="", content_type="text/html"):
+    from release_watch.fetch import FetchResult
+
+    text = f"<html><body><main>{body}</main></body></html>"
+    return FetchResult(url, url, status, content_type, text, len(text), outcome, reason)
+
+
+class SummaryLLM:
+    def __init__(self, reply=None, error=None):
+        self.reply = {"summary": "Adds X."} if reply is None else reply
+        self.error, self.calls = error, 0
+
+    async def complete_json(self, system, user, **kw):
+        self.calls += 1
+        if self.error:
+            raise self.error
+        return self.reply

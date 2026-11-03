@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     openrouter_model: str = "openai/gpt-5-mini"
     excluded_products: list[str] = list(DEFAULT_EXCLUDED_PRODUCTS)
     user_agent: str = CHROME_USER_AGENT
+    confirm_delay_seconds: int = 600
+    teams_webhook_url: SecretStr = SecretStr("")
+    web_base_url: str = "http://release-watch.k3s.home.lan"
 
 
 def load_secrets_file(path: Path) -> dict[str, str]:

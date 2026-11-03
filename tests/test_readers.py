@@ -54,7 +54,7 @@ async def test_index_reader_children_keys_are_normalised_urls():
     async with fast_fetcher() as f:
         r = await read_source(src("https://x.com/rn/", kind="index_page", follow=follow), f)
     assert [e.key for e in r.entries] == ["https://x.com/rn/v2", "https://x.com/rn/v1"]
-    assert r.entries[0].heading == "v2" and r.entries[0].body == ""
+    assert r.entries[0].heading == "v2" and r.entries[0].body == "[v2](https://x.com/rn/v2/?utm_source=a)"
 
 
 @respx.mock

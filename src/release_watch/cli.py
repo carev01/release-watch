@@ -19,6 +19,7 @@ from release_watch.docextractor import DocExtractorClient
 from release_watch.fetch import Fetcher
 from release_watch.jobs import job_run
 from release_watch.llm import LLMClient
+from release_watch.watch.run import run_watch
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
@@ -81,6 +82,24 @@ def discover(relabel: bool = typer.Option(False, help="Re-label every candidate,
         return counts
 
     _run("discover", body)
+
+
+@app.command()
+def watch(only: str = typer.Option(None, help="Only sources whose URL or vendor contains this text."),
+          dry_run: bool = typer.Option(False, "--dry-run", help="Read and print each source; write nothing.")) -> None:
+    """Check every active source for new and edited release-notes entries."""
+
+    async def body(settings, session_factory) -> dict:
+        async with make_fetcher(settings) as fetcher:
+            return await run_watch(session_factory, fetcher, make_llm(settings), only=only, dry_run=dry_run,
+                                   confirm_delay=settings.confirm_delay_seconds)
+
+    if dry_run:
+        settings = get_settings()
+        counts = asyncio.run(body(settings, _session_factory(settings)))
+        typer.echo(json.dumps(counts), err=True)
+        return
+    _run("watch", body)
 
 
 @app.command()

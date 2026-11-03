@@ -56,9 +56,11 @@ async def read_source(source: WatchedSource, fetcher) -> ReadResult:
         if failed := _failed(result):
             return failed
         if follow.get("pick", {}).get("type") == "versions":
-            entries = [Entry(key=k.title, heading=k.title, body="") for k in kids]
+            entries = [Entry(key=k.title, heading=k.title, body=k.title) for k in kids]
         else:
-            entries = [Entry(key=normalize_url(k.url), heading=k.title, body="", url=k.url) for k in kids]
+            # The body must differ per child: compare() treats a known body under a new key as a rename.
+            entries = [Entry(key=normalize_url(k.url), heading=k.title, body=f"[{k.title}]({k.url})", url=k.url)
+                       for k in kids]
         return ReadResult("ok", "", entries, result.bytes, "", result.final_url, result.status)
 
     result = await fetcher.fetch(source.url)

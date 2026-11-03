@@ -74,3 +74,10 @@ def test_seed_command(env, monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["seed", str(path)])
     assert result.exit_code == 0, result.output
     assert "news_new" in result.output
+
+
+def test_watch_command_writes_job_run(env):
+    result = CliRunner().invoke(cli.app, ["watch"])
+    assert result.exit_code == 0, result.output
+    [run] = jobs(env)
+    assert (run.job, run.status, run.counts["sources"]) == ("watch", "ok", 0)
