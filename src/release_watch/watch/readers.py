@@ -49,7 +49,23 @@ def _feed_entries(text: str) -> list[Entry]:
     return entries
 
 
+def unique_keys(entries: list[Entry]) -> list[Entry]:
+    """Feeds and JSON listings can repeat an id; suffix repeats in order, as the splitter does."""
+    seen: dict[str, int] = {}
+    for e in entries:
+        seen[e.key] = seen.get(e.key, 0) + 1
+        if seen[e.key] > 1:
+            e.key = f"{e.key} ({seen[e.key]})"
+    return entries
+
+
 async def read_source(source: WatchedSource, fetcher) -> ReadResult:
+    result = await _read(source, fetcher)
+    result.entries = unique_keys(result.entries)
+    return result
+
+
+async def _read(source: WatchedSource, fetcher) -> ReadResult:
     if source.kind == "index_page":
         follow = source.follow or {"pick": {"type": "links"}}
         result, kids = await children(fetcher, source.url, follow)

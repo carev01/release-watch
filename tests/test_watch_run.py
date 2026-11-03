@@ -201,3 +201,21 @@ async def test_one_source_crash_does_not_stop_the_run(session_factory):
     with session_factory() as s:
         details = set(s.scalars(select(FetchAttempt.detail)))
     assert "crash: RecursionError" in details
+
+
+async def test_storage_failure_on_one_source_does_not_stop_the_run(session_factory, monkeypatch):
+    import release_watch.watch.run as run_mod
+
+    add_source(session_factory)
+    add_source(session_factory, url="https://x.com/other")
+    real = run_mod._settle_first
+
+    def flaky(sf, src, *args):
+        if src.url == URL:
+            raise RuntimeError("db hiccup")
+        return real(sf, src, *args)
+
+    monkeypatch.setattr(run_mod, "_settle_first", flaky)
+    counts = await run(session_factory, ScriptedFetcher({
+        URL: html_page(URL, DAY1), "https://x.com/other": html_page("https://x.com/other", DAY1)}))
+    assert counts["baseline"] == 1 and counts["error"] == 1

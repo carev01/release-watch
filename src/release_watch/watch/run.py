@@ -110,8 +110,11 @@ async def run_watch(session_factory, fetcher, llm, *, confirm_delay: float, now:
 
     pending: list[_Pending] = []
     for src, result in zip(sources, results):
-        state = states[src.id]
-        p = _settle_first(session_factory, src, state, result, now(), counts)
+        try:
+            p = _settle_first(session_factory, src, states[src.id], result, now(), counts)
+        except Exception as exc:  # one source's storage failure must not stop the others
+            _record_crash(session_factory, src, exc, counts)
+            continue
         if p:
             pending.append(p)
 
@@ -121,9 +124,19 @@ async def run_watch(session_factory, fetcher, llm, *, confirm_delay: float, now:
             await sleep(wait)
         again = await asyncio.gather(*(read(p.source) for p in pending))
         for p, second in zip(pending, again):
-            await _settle_confirmed(session_factory, fetcher, llm, p, second, now(), counts)
+            try:
+                await _settle_confirmed(session_factory, fetcher, llm, p, second, now(), counts)
+            except Exception as exc:
+                _record_crash(session_factory, p.source, exc, counts)
     counts["successors"] = await propose_successors(session_factory, fetcher, now())
     return counts
+
+
+def _record_crash(sf, src, exc: Exception, counts) -> None:
+    with sf() as s:
+        s.add(FetchAttempt(source_id=src.id, outcome="error", detail=f"crash: {type(exc).__name__}"))
+        s.commit()
+    counts["error"] += 1
 
 
 def _settle_first(sf, src, state: _State, result: ReadResult, at: datetime, counts) -> _Pending | None:

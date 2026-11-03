@@ -90,3 +90,16 @@ async def test_gone_and_error():
     async with fast_fetcher() as f:
         assert (await read_source(src("https://x.com/a"), f)).outcome == "gone"
         assert (await read_source(src("https://x.com/b"), f)).outcome == "error"
+
+
+@respx.mock
+async def test_duplicate_feed_keys_get_suffixes():
+    feed = ('<?xml version="1.0"?><rss version="2.0"><channel><title>t</title>'
+            '<item><guid>https://a/#x</guid><title>A</title><description>one</description></item>'
+            '<item><guid>https://a/#x</guid><title>B</title><description>two</description></item>'
+            '</channel></rss>')
+    respx.get("https://a.com/rss").mock(return_value=httpx.Response(200, text=feed,
+                                                                    headers={"content-type": "application/rss+xml"}))
+    async with fast_fetcher() as f:
+        r = await read_source(src("https://a.com/rss", kind="feed"), f)
+    assert [e.key for e in r.entries] == ["https://a/#x", "https://a/#x (2)"]
