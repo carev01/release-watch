@@ -1,0 +1,21 @@
+# Hand-researched sources. Loaded with `release-watch seed seeds/sources.yaml`.
+# Every entry becomes a candidate for the owner's review; rejected entries are never re-opened.
+#
+# watched_sources: kind is entry_page | index_page | feed | section (section needs a CSS selector)
+# news_sources:    kind is feed | listing | github_releases
+# vendor (and product, if given) must match DocExtractor's names exactly.
+
+watched_sources:
+  - vendor: Velero
+    product: Velero
+    url: https://github.com/vmware-tanzu/velero/releases.atom
+    kind: feed
+    title: Velero releases
+    notes: "GitHub releases Atom feed (open source)"
+
+news_sources:
+  - vendor: Commvault
+    product: null
+    url: https://www.commvault.com/news
+    kind: listing
+    notes: "Press releases"

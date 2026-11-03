@@ -23,3 +23,8 @@ def normalize_url(url: str) -> str:
         if k.lower() not in DROPPED_PARAMS and not k.lower().startswith("utm_")
     )
     return urlunsplit(("https", netloc, path, urlencode(query), ""))
+
+
+def section_key(url: str, selector: str) -> str:
+    """Key for one section of a multi-feed page (e.g. Keepit's #updates and #pmc)."""
+    return f"{normalize_url(url)}#selector={selector}"
