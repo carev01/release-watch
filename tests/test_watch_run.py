@@ -170,9 +170,10 @@ async def test_summary_failure_keeps_event(session_factory):
 
 async def test_edited_entry_event_has_diff(session_factory):
     add_source(session_factory)
-    await run(session_factory, ScriptedFetcher({URL: html_page(URL, DAY1)}))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, DAY1)}), now=later(0))
     edited = DAY1.replace("<li>SAML sign-on.</li>", "<li>SAML sign-on.</li><li>SCIM provisioning.</li>")
-    await run(session_factory, ScriptedFetcher({URL: html_page(URL, edited)}))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, edited)}), now=later(24))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, edited)}), now=later(48))
     [ev] = events(session_factory)
     assert ev.kind == "edited" and "+* SCIM provisioning." in ev.diff
 
@@ -219,3 +220,40 @@ async def test_storage_failure_on_one_source_does_not_stop_the_run(session_facto
     counts = await run(session_factory, ScriptedFetcher({
         URL: html_page(URL, DAY1), "https://x.com/other": html_page("https://x.com/other", DAY1)}))
     assert counts["baseline"] == 1 and counts["error"] == 1
+
+
+async def test_same_heading_added_above_is_sent_once_as_new(session_factory):
+    add_source(session_factory)
+    day1 = "<h2>October 1, 2026</h2><ul><li>Entry A.</li></ul>"
+    day2 = "<h2>October 1, 2026</h2><ul><li>Entry B.</li></ul>" + day1
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, day1)}))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, day2)}))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, day2)}))
+    assert [(e.kind, "Entry B." in e.body) for e in events(session_factory)] == [("new", True)]
+
+
+def later(hours):
+    from datetime import timedelta
+    base = datetime(2026, 11, 4, 9, tzinfo=UTC)
+    return lambda: base + timedelta(hours=hours)
+
+
+async def test_edit_held_until_seen_again_next_day(session_factory):
+    add_source(session_factory)
+    edited = DAY1.replace("<li>SAML sign-on.</li>", "<li>SAML sign-on.</li><li>SCIM provisioning.</li>")
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, DAY1)}), now=later(0))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, edited)}), now=later(24))
+    assert events(session_factory) == []
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, edited)}), now=later(30))  # same day: held
+    assert events(session_factory) == []
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, edited)}), now=later(48))
+    [ev] = events(session_factory)
+    assert ev.kind == "edited" and "+* SCIM provisioning." in ev.diff
+
+
+async def test_daily_drift_never_becomes_an_edit(session_factory):
+    add_source(session_factory)
+    pages = [DAY1.replace("Retention.", f"Retention. Build {n}.") for n in range(4)]
+    for day, page in enumerate(pages):
+        await run(session_factory, ScriptedFetcher({URL: html_page(URL, page)}), now=later(24 * day))
+    assert events(session_factory) == []

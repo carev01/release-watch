@@ -4,7 +4,7 @@ import asyncio
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select, update
 
@@ -19,6 +19,7 @@ from release_watch.watch.summary import summarize
 
 MAX_PARALLEL = 8
 OK_OUTCOMES = ("baseline", "same", "changed")
+EDIT_HOLD = timedelta(hours=20)  # an edit must still be there on the next daily run
 
 
 def utcnow() -> datetime:
@@ -42,12 +43,12 @@ class _Pending:
 
 
 def _load_state(s, source_id) -> _State:
-    rows = s.execute(select(Entry.key, Entry.body_hash, Entry.body, Entry.removed_at)
-                     .where(Entry.source_id == source_id)).all()
+    rows = s.execute(select(Entry.key, Entry.body_hash, Entry.body, Entry.removed_at, Entry.pending_hash,
+                            Entry.pending_since).where(Entry.source_id == source_id)).all()
     prev_size = s.scalar(select(FetchAttempt.bytes).where(FetchAttempt.source_id == source_id,
                                                           FetchAttempt.outcome.in_(OK_OUTCOMES))
                          .order_by(FetchAttempt.fetched_at.desc()).limit(1))
-    return _State([Known(r.key, r.body_hash, r.body) for r in rows], prev_size,
+    return _State([Known(r.key, r.body_hash, r.body, r.pending_hash, r.pending_since) for r in rows], prev_size,
                   sum(1 for r in rows if r.removed_at is None))
 
 
@@ -66,14 +67,15 @@ def _mode(source) -> str:
 
 
 def _confirmed(first: Changes, second: Changes) -> Changes:
-    """Keep only changes that look identical in both reads."""
+    """The confirmation read's changes, keeping only new and edited entries identical in both reads."""
     def sig(entry):
         return entry.key, body_hash(entry.body)
-    again_new = {sig(e) for e in second.new}
-    again_edit = {sig(e) for e, _ in second.edited}
-    return Changes(new=[e for e in first.new if sig(e) in again_new],
-                   edited=[(e, k) for e, k in first.edited if sig(e) in again_edit],
-                   unchanged=first.unchanged, removed=first.removed)
+    first_new = {sig(e) for e in first.new}
+    first_edit = {sig(e) for e, _ in first.edited}
+    return Changes(new=[e for e in second.new if sig(e) in first_new],
+                   edited=[(e, k) for e, k in second.edited if sig(e) in first_edit],
+                   unchanged=second.unchanged, removed=second.removed, rekeyed=second.rekeyed,
+                   matched=second.matched)
 
 
 async def run_watch(session_factory, fetcher, llm, *, confirm_delay: float, now: Callable[[], datetime] = utcnow,
@@ -168,20 +170,49 @@ def _settle_first(sf, src, state: _State, result: ReadResult, at: datetime, coun
             if changes.new or changes.edited:
                 s.commit()
                 return _Pending(src, state, result, changes)
-            _touch(s, row, changes, result, at)
+            _write_entries(s, row, changes, at)
             _attempt(s, row, "same", result)
             counts["same"] += 1
         s.commit()
     return None
 
 
-def _touch(s, row, changes: Changes, result: ReadResult, at: datetime) -> None:
-    keys = [e.key for e in result.entries]
-    s.execute(update(Entry).where(Entry.source_id == row.id, Entry.key.in_(keys))
-              .values(last_seen=at, removed_at=None))
-    if changes.removed:
-        s.execute(update(Entry).where(Entry.source_id == row.id, Entry.key.in_(changes.removed),
-                                      Entry.removed_at.is_(None)).values(removed_at=at))
+def _write_entries(s, row, changes: Changes, at: datetime, *, new: list | None = None,
+                   fire: list | None = None, pend: dict | None = None) -> None:
+    """Rewrite the source's stored entries from today's read. Unconfirmed new entries are left out and
+    unconfirmed or held edits keep their stored body, so tomorrow's read detects them again."""
+    old = {e.key: e for e in s.scalars(select(Entry).where(Entry.source_id == row.id))}
+    rows: dict[str, dict] = {}
+
+    def keep(key, src: Entry, **changes_):
+        rows[key] = dict(key=key, heading=src.heading, body=src.body, body_hash=src.body_hash, url=src.url,
+                         published_at=src.published_at, first_seen=src.first_seen, last_seen=at, removed_at=None,
+                         pending_hash=src.pending_hash, pending_since=src.pending_since) | changes_
+
+    for entry, known in changes.matched:
+        keep(entry.key, old[known.key], heading=entry.heading, body=entry.body, url=entry.url or old[known.key].url)
+    for entry in new or []:
+        rows[entry.key] = dict(key=entry.key, heading=entry.heading, body=entry.body, body_hash=body_hash(entry.body),
+                               url=entry.url, published_at=entry.published_at, first_seen=at, last_seen=at,
+                               removed_at=None, pending_hash=None, pending_since=None)
+    fired = {e.key for e in fire or []}
+    for entry, known in changes.edited:
+        if entry.key in fired:
+            keep(entry.key, old[known.key], heading=entry.heading, body=entry.body, body_hash=body_hash(entry.body),
+                 pending_hash=None, pending_since=None)
+        elif pend and entry.key in pend:
+            keep(entry.key, old[known.key], pending_hash=pend[entry.key][0], pending_since=pend[entry.key][1])
+        else:
+            keep(entry.key, old[known.key])
+    used = {kn.key for _, kn in changes.matched} | {kn.key for _, kn in changes.edited}
+    for key, e in old.items():  # stored entries not on today's page stay, marked removed
+        if key not in rows and key not in used:
+            keep(key, e, last_seen=e.last_seen, removed_at=e.removed_at or at)
+    for e in old.values():
+        s.delete(e)
+    s.flush()
+    for values in rows.values():
+        s.add(Entry(source_id=row.id, **values))
     row.suspect_streak, row.last_ok_at = 0, at
 
 
@@ -209,22 +240,26 @@ async def _settle_confirmed(sf, fetcher, llm, p: _Pending, second: ReadResult, a
         counts["suspect"] += 1
         return
 
+    # Edits wait for a second daily sighting of the same new body (spec 7.3: no false edits).
+    fire, pend = [], {}
+    for entry, known in changes.edited:
+        h = body_hash(entry.body)
+        if known.pending_hash == h and known.pending_since and at - known.pending_since >= EDIT_HOLD:
+            fire.append(entry)
+        else:
+            pend[entry.key] = (h, known.pending_since if known.pending_hash == h else at)
+    to_send = Changes(new=changes.new, edited=[(e, k) for e, k in changes.edited if e in fire],
+                      unchanged=changes.unchanged, removed=changes.removed)
+
     mode = _mode(src)
-    events = await _build_events(sf, fetcher, src, mode, changes)
+    events = await _build_events(sf, fetcher, src, mode, to_send)
     for ev in events:
         if ev.kind in ("new", "edited"):
             ev.summary = await summarize(llm, src.vendor_name, ev.heading, ev.diff or ev.body or "")
 
     with sf() as s:
         row = s.get(WatchedSource, src.id)
-        by_key = {e.key: e for e in s.scalars(select(Entry).where(Entry.source_id == row.id))}
-        for e in changes.new:
-            s.add(Entry(source_id=row.id, key=e.key, heading=e.heading, body=e.body, body_hash=body_hash(e.body),
-                        url=e.url, published_at=e.published_at, first_seen=at, last_seen=at))
-        for e, _ in changes.edited:
-            stored = by_key[e.key]
-            stored.heading, stored.body, stored.body_hash = e.heading, e.body, body_hash(e.body)
-        _touch(s, row, changes, second, at)
+        _write_entries(s, row, changes, at, new=changes.new, fire=fire, pend=pend)
         s.add(Snapshot(source_id=row.id, markdown=second.markdown, hash=body_hash(second.markdown)))
         for ev in events:
             if ev.dedupe_key and s.scalar(select(func.count()).select_from(EntryEvent)
@@ -232,9 +267,10 @@ async def _settle_confirmed(sf, fetcher, llm, p: _Pending, second: ReadResult, a
                 continue
             s.add(ev)
             counts["events_queued" if ev.status == "queued" else "events_needs_look"] += 1
-        _attempt(s, row, "changed", second)
+        sending = bool(changes.new or fire)
+        _attempt(s, row, "changed" if sending else "same", second, None if sending else "edit held for a day")
         s.commit()
-    counts["changed"] += 1
+    counts["changed" if sending else "same"] += 1
 
 
 def _version_of(*texts: str) -> str | None:

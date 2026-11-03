@@ -2,6 +2,7 @@
 
 import difflib
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from release_watch.watch.extract import body_hash, punct_insensitive
 from release_watch.watch.readers import ReadResult
@@ -17,6 +18,8 @@ class Known:
     key: str
     body_hash: str
     body: str
+    pending_hash: str | None = None
+    pending_since: datetime | None = None
 
 
 @dataclass
@@ -25,26 +28,42 @@ class Changes:
     edited: list[tuple[Entry, Known]] = field(default_factory=list)
     unchanged: int = 0
     removed: list[str] = field(default_factory=list)
+    rekeyed: list[tuple[Entry, Known]] = field(default_factory=list)  # same body under a new key
+    matched: list[tuple[Entry, Known]] = field(default_factory=list)  # every unchanged entry and its stored row
 
 
 def compare(known: list[Known], fresh: list[Entry]) -> Changes:
+    """Match by body first, then by key: a known body under another key (a renamed heading, or an older
+    same-heading entry pushed down to "x (2)") is never new or edited."""
+    by_hash: dict[str, Known] = {}
+    for k in known:
+        by_hash.setdefault(k.body_hash, k)
     by_key = {k.key: k for k in known}
-    hashes = {k.body_hash for k in known}
+    consumed: set[str] = set()
     changes = Changes()
+    rest = []
     for entry in fresh:
-        h = body_hash(entry.body)
-        old = by_key.get(entry.key)
-        if old is None:
-            if h in hashes:  # same body under a renamed or reordered heading
-                changes.unchanged += 1
-            else:
-                changes.new.append(entry)
-        elif old.body_hash == h or punct_insensitive(old.body) == punct_insensitive(entry.body):
+        old = by_hash.get(body_hash(entry.body))
+        if old is not None and old.key not in consumed:
+            consumed.add(old.key)
             changes.unchanged += 1
+            changes.matched.append((entry, old))
+            if old.key != entry.key:
+                changes.rekeyed.append((entry, old))
+        else:
+            rest.append(entry)
+    for entry in rest:
+        old = by_key.get(entry.key)
+        if old is None or old.key in consumed:
+            changes.new.append(entry)
+            continue
+        consumed.add(old.key)
+        if punct_insensitive(old.body) == punct_insensitive(entry.body):
+            changes.unchanged += 1
+            changes.matched.append((entry, old))
         else:
             changes.edited.append((entry, old))
-    fresh_keys = {e.key for e in fresh}
-    changes.removed = [k.key for k in known if k.key not in fresh_keys]
+    changes.removed = [k.key for k in known if k.key not in consumed]
     return changes
 
 

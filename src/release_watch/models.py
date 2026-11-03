@@ -163,6 +163,9 @@ class Entry(Base):
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # An edit is sent only once a later daily run sees the same new body (rotating text never qualifies).
+    pending_hash: Mapped[str | None] = mapped_column(String(64))
+    pending_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (UniqueConstraint("source_id", "key", name="uq_entry_source_key"),)
 

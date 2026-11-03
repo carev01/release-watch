@@ -19,8 +19,8 @@ def test_new_entry_detected():
 
 def test_reordered_heading_same_body_not_new():
     ch = compare([k("oct 1", "same body")], [e("october 1", "same body")])
-    assert ch.new == [] and ch.edited == []
-    assert ch.removed == ["oct 1"]
+    assert ch.new == [] and ch.edited == [] and ch.removed == []
+    assert [(entry.key, old.key) for entry, old in ch.rekeyed] == [("october 1", "oct 1")]
 
 
 def test_edited_entry_detected_with_diff():
@@ -58,3 +58,13 @@ def test_page_suspect_shrunk_and_no_entries():
     assert page_suspect(1000, 5, ok) is None
     assert page_suspect(None, 0, ReadResult("ok", "", [], size=10)) is None
     assert page_suspect(1000, 5, ReadResult("suspect", "login_redirect")) == "login_redirect"
+
+
+def test_second_entry_under_same_heading_is_new_not_edited():
+    # Day 1: one 2026-10-01 entry. Day 2: the vendor adds another 2026-10-01 entry above it.
+    known = [k("2026-10-01", "## 2026-10-01\nA")]
+    fresh = [e("2026-10-01", "## 2026-10-01\nB"), e("2026-10-01 (2)", "## 2026-10-01\nA")]
+    ch = compare(known, fresh)
+    assert [x.body for x in ch.new] == ["## 2026-10-01\nB"]
+    assert ch.edited == []
+    assert [(entry.key, old.key) for entry, old in ch.rekeyed] == [("2026-10-01 (2)", "2026-10-01")]

@@ -59,3 +59,10 @@ def test_deeply_nested_html_does_not_crash():
     html = "<div>" * 3000 + "<h2>October 1, 2026</h2><p>Deep text.</p>" + "</div>" * 3000
     md = html_to_markdown(html)
     assert "October 1, 2026" in md and "Deep text." in md
+
+
+def test_more_noise_patterns_ignored():
+    base = "## 2026-10-01\n\nNew thing.\n"
+    for noise in ("Last Published Date: 10/03/2026", "Updated: Oct 3, 2026", "Published 3 days ago",
+                  "1.2K views", "12 out of 15 found this helpful"):
+        assert body_hash(base + noise) == body_hash(base), noise
