@@ -1,0 +1,122 @@
+"""Command line for the cron jobs and the web app."""
+
+import asyncio
+import json
+import logging
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+import typer
+
+from release_watch.catalog import sync_catalog
+from release_watch.config import Settings, get_settings
+from release_watch.db import make_engine, make_session_factory
+from release_watch.discovery.classify import label_pending
+from release_watch.discovery.heuristic import propose_candidates, upsert_proposals
+from release_watch.discovery.seeds import load_seeds
+from release_watch.docextractor import DocExtractorClient
+from release_watch.fetch import Fetcher
+from release_watch.jobs import job_run
+from release_watch.llm import LLMClient
+
+app = typer.Typer(no_args_is_help=True, add_completion=False)
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def make_docextractor_client(settings: Settings) -> DocExtractorClient:
+    return DocExtractorClient(settings.docextractor_base_url, settings.docextractor_api_key.get_secret_value())
+
+
+def make_fetcher(settings: Settings) -> Fetcher:
+    return Fetcher(settings)
+
+
+def make_llm(settings: Settings) -> LLMClient:
+    return LLMClient(settings)
+
+
+def _session_factory(settings: Settings):
+    return make_session_factory(make_engine(settings.database_url))
+
+
+def _run(job: str, body) -> None:
+    """Run an async job body inside job_run; on failure print a one-line error and exit 1."""
+    settings = get_settings()
+    session_factory = _session_factory(settings)
+    try:
+        with job_run(session_factory, job) as counts:
+            counts.update(asyncio.run(body(settings, session_factory)))
+    except Exception as exc:
+        typer.echo(f"{job} failed: {type(exc).__name__}: {exc}", err=True)
+        raise typer.Exit(1)
+    typer.echo(json.dumps(counts, default=str))
+
+
+async def _sync(settings, session_factory) -> dict:
+    async with make_docextractor_client(settings) as client:
+        with session_factory() as s:
+            return await sync_catalog(client, s, settings.excluded_products, datetime.now(UTC))
+
+
+@app.command()
+def sync() -> None:
+    """Mirror DocExtractor's vendors, products and sources."""
+    _run("sync", _sync)
+
+
+@app.command()
+def discover(relabel: bool = typer.Option(False, help="Re-label every candidate, not just new ones.")) -> None:
+    """Sync the catalog, propose release-notes candidates, and label them by fetching them live."""
+
+    async def body(settings, session_factory) -> dict:
+        counts = {"sync": await _sync(settings, session_factory)}
+        async with make_docextractor_client(settings) as client:
+            with session_factory() as s:
+                counts["proposals"] = upsert_proposals(s, await propose_candidates(client, s))
+        async with make_fetcher(settings) as fetcher:
+            counts["labels"] = await label_pending(session_factory, fetcher, make_llm(settings), relabel=relabel)
+        return counts
+
+    _run("discover", body)
+
+
+@app.command()
+def seed(path: Path) -> None:
+    """Load hand-researched sources from a YAML file."""
+    settings = get_settings()
+    with _session_factory(settings)() as s:
+        try:
+            counts = load_seeds(s, path)
+        except ValueError as exc:
+            typer.echo(f"seed failed: {exc}", err=True)
+            raise typer.Exit(1)
+    typer.echo(json.dumps(counts))
+
+
+@app.command()
+def web(host: str = "0.0.0.0", port: int = 8000) -> None:
+    """Serve the review queue."""
+    import uvicorn
+
+    from release_watch.web.app import create_app
+
+    uvicorn.run(create_app(_session_factory(get_settings())), host=host, port=port)
+
+
+@app.command()
+def migrate() -> None:
+    """Apply database migrations."""
+    from alembic import command
+    from alembic.config import Config
+
+    settings = get_settings()
+    cfg = Config(str(ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(ROOT / "alembic"))
+    cfg.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+    command.upgrade(cfg, "head")
+
+
+logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(levelname)s %(name)s %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)
