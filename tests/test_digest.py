@@ -130,3 +130,14 @@ async def test_teams_retries_once_on_429():
     route = respx.post(HOOK).mock(side_effect=[httpx.Response(429), httpx.Response(202)])
     await teams().post({"type": "AdaptiveCard"})
     assert route.call_count == 2
+
+
+async def test_any_post_error_hides_the_url():
+    class Boom(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request):
+            raise ValueError(f"bad url {request.url}")
+
+    with pytest.raises(TeamsError) as exc:
+        await Teams(HOOK, transport=Boom(), sleep=no_sleep).post({"type": "AdaptiveCard"})
+    assert "SECRETSIG" not in str(exc.value) and "logic.azure.com" not in str(exc.value)
+    assert exc.value.__cause__ is None and exc.value.__suppress_context__

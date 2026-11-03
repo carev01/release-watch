@@ -153,3 +153,18 @@ def test_source_config_sets_login_walled(catalog, tmp_path):
     with catalog() as s:
         load_seeds(s, write(tmp_path, cfg))
         assert s.scalars(select(WatchedSource)).one().login_walled is True
+
+
+def test_changed_rules_reset_the_baseline(catalog, tmp_path):
+    from release_watch.models import Entry
+
+    with catalog() as s:
+        load_seeds(s, write(tmp_path, CONFIG))
+        w = s.scalars(select(WatchedSource)).one()
+        s.add(Entry(source_id=w.id, key="k", heading="k", body="b", body_hash="h"))
+        s.commit()
+        load_seeds(s, write(tmp_path, CONFIG))  # same rules: entries kept
+        assert s.scalar(select(func.count()).select_from(Entry)) == 1
+        changed = CONFIG.replace("heading_level: 3", "heading_level: 2")
+        load_seeds(s, write(tmp_path, changed))  # new split rule: re-baseline, no false "new" entries
+        assert s.scalar(select(func.count()).select_from(Entry)) == 0

@@ -3,10 +3,10 @@
 from pathlib import Path
 
 import yaml
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from release_watch.models import CatalogProduct, CatalogVendor, NewsSource, WatchedSource
+from release_watch.models import CatalogProduct, CatalogVendor, Entry, NewsSource, WatchedSource
 from release_watch.urls import normalize_url, section_key
 from release_watch.watch.rules import PICK_TYPES
 
@@ -74,6 +74,7 @@ def load_seeds(session: Session, path: Path) -> dict[str, int]:
 
 
 CONFIG_FIELDS = ("selector", "split_rule", "follow", "kind", "login_walled")
+RESHAPING_FIELDS = ("selector", "split_rule", "follow", "kind")
 
 
 def _check_follow(index: int, follow: dict) -> None:
@@ -97,9 +98,14 @@ def _apply_config(session: Session, index: int, entry: dict, counts: dict[str, i
         _check_follow(index, entry["follow"])
     if row.state == "rejected":
         return
+    reshaped = False
     for name in CONFIG_FIELDS:
         if name in entry:
+            if name in RESHAPING_FIELDS and getattr(row, name) != entry[name]:
+                reshaped = True
             setattr(row, name, entry[name])
+    if reshaped:  # new keys would read as new entries: start again from a fresh baseline
+        session.execute(delete(Entry).where(Entry.source_id == row.id))
     counts["configured"] += 1
 
 

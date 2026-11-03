@@ -32,6 +32,8 @@ class Teams:
                         await self._sleep(RETRY_DELAY)
                         continue
                     raise TeamsError(f"Teams webhook unreachable: {type(exc).__name__}") from None
+                except Exception as exc:  # e.g. InvalidURL: its message would carry the signed URL
+                    raise TeamsError(f"Teams webhook request failed: {type(exc).__name__}") from None
                 if resp.is_success:
                     return
                 if attempt == 0 and (resp.status_code == 429 or resp.status_code >= 500):
