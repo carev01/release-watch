@@ -10,7 +10,7 @@ import uuid
 
 from sqlalchemy import func, select
 
-from release_watch.models import Entry, EntryEvent, WatchedSource
+from release_watch.models import CatalogProduct, Entry, EntryEvent, WatchedSource
 from release_watch.urls import normalize_url
 from release_watch.watch.extract import extract_markdown
 from release_watch.watch.rules import version_tuple
@@ -64,7 +64,10 @@ async def propose_successors(session_factory, fetcher, now) -> dict[str, int]:
             old = s.get(WatchedSource, old_id)
             pin = old.follow["pin"]
             result = await fetcher.fetch(url)
-            name = old.title or old.vendor_name
+            product = s.get(CatalogProduct, old.product_de_id) if old.product_de_id else None
+            name = f"{old.vendor_name} {product.name}" if product else old.vendor_name
+            if old.title:
+                name = f"{name} ({old.title})"
             if _accepts(result, old.url, old.selector, pin["successor"], version) and not s.scalar(
                     select(func.count()).select_from(WatchedSource).where(WatchedSource.url_key == normalize_url(url))):
                 new = WatchedSource(

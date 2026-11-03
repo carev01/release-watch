@@ -50,7 +50,7 @@ async def test_successor_created_when_signal_newer(session_factory):
     assert sources(session_factory)[OLD].superseded_by == new.id
     [ev] = events(session_factory)
     assert (ev.kind, ev.status, ev.url) == ("moved", "queued", NEW)
-    assert ev.heading == "Release-notes URL for Storage Protect 8.2.1 what's new moved to 8.2.2"
+    assert ev.heading == "Release-notes URL for IBM (Storage Protect 8.2.1 what's new) moved to 8.2.2"
     assert old_id
 
 
@@ -99,3 +99,18 @@ async def test_old_source_superseded_after_successor_baseline(session_factory):
     await run_watch(session_factory, fetcher, SummaryLLM(), confirm_delay=0)  # successor baseline
     assert sources(session_factory)[OLD].state == "superseded"
     assert sources(session_factory)[NEW].state == "active"
+
+
+async def test_moved_heading_names_the_product(session_factory):
+    import uuid as _uuid
+
+    from release_watch.models import CatalogProduct
+    setup(session_factory)
+    pid = _uuid.uuid4()
+    with session_factory() as s:
+        s.add(CatalogProduct(de_id=pid, vendor_de_id=_uuid.uuid4(), name="Storage Protect", synced_at=NOW))
+        s.query(WatchedSource).filter(WatchedSource.url == OLD).update({"product_de_id": pid})
+        s.commit()
+    await propose_successors(session_factory, ScriptedFetcher({NEW: html_page(NEW, GOOD)}), NOW)
+    [ev] = events(session_factory)
+    assert ev.heading == "Release-notes URL for IBM Storage Protect (Storage Protect 8.2.1 what's new) moved to 8.2.2"
