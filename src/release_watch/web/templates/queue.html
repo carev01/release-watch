@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Release Watch: review queue</h1>
+<p class="muted">{{ watched_count }} {{ state }}s{% if labels %}:
+  {% for name, n in labels %}{{ n }} {{ name }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+  {% if news_count %} · {{ news_count }} news sources{% endif %}</p>
+
+<form class="filters" method="get" action="/">
+  <label>State<br><select name="state">
+    {% for s in ["candidate", "active", "rejected", "gone"] %}<option {% if s == state %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select></label>
+  <label>Label<br><select name="label"><option value="">any</option>
+    {% for l in ["release_notes", "not_release_notes", "unsure", "blocked"] %}<option {% if l == label %}selected{% endif %}>{{ l }}</option>{% endfor %}
+  </select></label>
+  <label>Vendor<br><select name="vendor"><option value="">all</option>
+    {% for v in vendors %}<option {% if v == vendor %}selected{% endif %}>{{ v }}</option>{% endfor %}
+  </select></label>
+  <button>Filter</button>
+</form>
+
+{% for vendor_name, g in groups.items() %}
+<h2>{{ vendor_name }}</h2>
+{% for table, rows in [("watched", g.watched), ("news", g.news)] if rows %}
+<form method="post" action="/decide">
+  <input type="hidden" name="table" value="{{ table }}">
+  <input type="hidden" name="back" value="{{ back }}">
+  <h3>{{ "Release-notes sources" if table == "watched" else "News sources" }}</h3>
+  <table>
+    <tr><th><input type="checkbox" onclick="for (const c of this.form.querySelectorAll('input[name=ids]')) c.checked = this.checked" title="Select all"></th>
+      {% if table == "watched" %}<th>Title / URL</th><th>Kind</th><th>Label</th><th>Origin</th>
+      {% else %}<th>URL</th><th>Kind</th><th>Notes</th><th>Origin</th>{% endif %}</tr>
+    {% for r in rows %}
+    <tr>
+      <td><input type="checkbox" name="ids" value="{{ r.id }}"></td>
+      {% if table == "watched" %}
+      <td>{{ r.title or "(untitled)" }}{% if r.login_walled %} <span class="pill">login</span>{% endif %}<br>
+        <a class="url" href="{{ r.url }}" target="_blank" rel="noopener">{{ r.url }}</a>
+        {% if r.notes %}<br><span class="muted">{{ r.notes }}</span>{% endif %}</td>
+      <td>{{ r.kind }}</td>
+      <td>{% if r.label %}<span class="pill {{ r.label }}">{{ r.label }}</span><br><span class="muted">{{ r.label_reason }}{% if r.label_evidence %}: “{{ r.label_evidence[:160] }}”{% endif %}</span>{% else %}<span class="muted">not labelled</span>{% endif %}</td>
+      <td>{{ r.origin }}{% if r.discovery_reason and r.discovery_reason != "seed" %}<br><span class="muted">{{ r.discovery_reason }}</span>{% endif %}</td>
+      {% else %}
+      <td><a class="url" href="{{ r.url }}" target="_blank" rel="noopener">{{ r.url }}</a></td>
+      <td>{{ r.kind }}</td><td class="muted">{{ r.notes or "" }}</td><td>{{ r.origin }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="bar">
+    <button name="decision" value="confirm">Confirm selected</button>
+    <button name="decision" value="reject">Reject selected</button>
+    {% if state != "candidate" %}<button name="decision" value="reset">Back to candidates</button>{% endif %}
+  </div>
+</form>
+{% endfor %}
+{% else %}
+<p>Nothing here.</p>
+{% endfor %}
+{% endblock %}

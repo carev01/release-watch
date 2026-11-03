@@ -38,3 +38,4 @@ packages = ["src/release_watch"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]
