@@ -49,14 +49,15 @@ def compute_health(s, now: datetime) -> Health:
     watched = list(s.scalars(active.where(WatchedSource.login_walled.is_(False))
                              .order_by(WatchedSource.vendor_name, WatchedSource.title)))
     by_id = {w.id: w for w in watched}
-    h.total = len(watched)
+    last_watch = s.scalar(select(JobRun).where(JobRun.job == "watch").order_by(JobRun.started_at.desc()).limit(1))
+    # Sources added during or after the run (successors) are checked from the next run on.
+    h.total = sum(1 for w in watched if last_watch is None or w.created_at <= last_watch.started_at)
     h.broken = [_label(w) for w in watched if w.suspect_streak >= BROKEN_STREAK]
     for vendor, n in s.execute(select(WatchedSource.vendor_name, func.count()).where(
             WatchedSource.state == "active", WatchedSource.login_walled.is_(True))
             .group_by(WatchedSource.vendor_name).order_by(WatchedSource.vendor_name)):
         h.waiting_login[vendor] = n
 
-    last_watch = s.scalar(select(JobRun).where(JobRun.job == "watch").order_by(JobRun.started_at.desc()).limit(1))
     if last_watch is not None:
         window_end = last_watch.finished_at or now
         attempts = s.scalars(select(FetchAttempt).where(FetchAttempt.fetched_at >= last_watch.started_at,

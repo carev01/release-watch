@@ -96,3 +96,16 @@ def test_gone_since_last_digest(session_factory):
         s.add(FetchAttempt(source_id=old.id, outcome="gone", fetched_at=NOW - timedelta(days=3)))
         s.commit()
         assert compute_health(s, NOW).gone_new == ["V: g"]
+
+
+def test_total_excludes_sources_created_after_the_watch_started(session_factory):
+    with session_factory() as s:
+        a = src(s, "https://x.com/a")
+        a.created_at = NOW - timedelta(days=5)
+        new = src(s, "https://x.com/successor")
+        new.created_at = NOW - timedelta(hours=1)
+        watch_run(s, NOW - timedelta(hours=2))
+        s.add(FetchAttempt(source_id=a.id, outcome="same", fetched_at=NOW - timedelta(hours=1, minutes=50)))
+        s.commit()
+        h = compute_health(s, NOW)
+    assert (h.checked, h.total) == (1, 1)
