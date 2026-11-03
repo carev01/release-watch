@@ -1,4 +1,4 @@
-"""Review queue: the owner confirms or rejects candidate sources. LAN-only, no auth (spec §12)."""
+"""Review queue, "needs a look" and event pages. LAN-only, no auth (spec §12)."""
 
 import uuid
 from collections import Counter, defaultdict
@@ -6,20 +6,34 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 
-from release_watch.models import NewsSource, WatchedSource
+from release_watch.models import LABEL, SOURCE_STATE, CatalogProduct, EntryEvent, NewsSource, WatchedSource
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 NEW_STATE = {"confirm": "active", "reject": "rejected", "reset": "candidate"}
+EVENT_DECISION = {"send": "queued", "dismiss": "dismissed"}
+
+
+def _safe_back(back: str, default: str) -> str:
+    """Only same-site paths, so the form can't be used as an open redirect."""
+    if back.startswith("/") and not back.startswith(("//", "/\\")) and "\\" not in back:
+        return back
+    return default
 
 
 def create_app(session_factory) -> FastAPI:
     app = FastAPI(title="Release Watch")
+
+    def needs_look_count() -> int:
+        with session_factory() as s:
+            return s.scalar(select(func.count()).select_from(EntryEvent).where(EntryEvent.status == "needs_look"))
+
+    templates.env.globals["needs_look_count"] = needs_look_count
 
     @app.get("/healthz")
     def healthz():
@@ -32,6 +46,8 @@ def create_app(session_factory) -> FastAPI:
 
     @app.get("/")
     def queue(request: Request, state: str = "candidate", label: str | None = None, vendor: str | None = None):
+        if state not in SOURCE_STATE.enums or (label and label not in LABEL.enums):
+            raise HTTPException(400, "unknown state or label")
         with session_factory() as s:
             wq = select(WatchedSource).where(WatchedSource.state == state)
             nq = select(NewsSource).where(NewsSource.state == state)
@@ -68,8 +84,36 @@ def create_app(session_factory) -> FastAPI:
                 row.decided_at = None if decision == "reset" else now
                 row.confirmed_by = None if decision == "reset" else "owner"
             s.commit()
-        # Only same-site paths, so the form can't be used as an open redirect.
-        target = back if back.startswith("/") and not back.startswith("//") else "/"
-        return RedirectResponse(target, status_code=303)
+        return RedirectResponse(_safe_back(back, "/"), status_code=303)
+
+    @app.get("/needs-look")
+    def needs_look(request: Request):
+        with session_factory() as s:
+            rows = s.execute(select(EntryEvent, WatchedSource).join(WatchedSource, WatchedSource.id == EntryEvent.source_id)
+                             .where(EntryEvent.status == "needs_look").order_by(EntryEvent.created_at)).all()
+        now = datetime.now(UTC)
+        items = [{"event": ev, "source": src, "age_days": (now - ev.created_at).days} for ev, src in rows]
+        return templates.TemplateResponse(request, "needs_look.html", {"items": items})
+
+    @app.post("/events/decide")
+    def decide_events(ids: Annotated[list[uuid.UUID], Form()],
+                      decision: Annotated[Literal["send", "dismiss"], Form()],
+                      back: Annotated[str, Form()] = "/needs-look"):
+        now = datetime.now(UTC)
+        with session_factory() as s:
+            for ev in s.scalars(select(EntryEvent).where(EntryEvent.id.in_(ids), EntryEvent.status == "needs_look")):
+                ev.status, ev.decided_at = EVENT_DECISION[decision], now
+            s.commit()
+        return RedirectResponse(_safe_back(back, "/needs-look"), status_code=303)
+
+    @app.get("/events/{event_id}")
+    def event_page(request: Request, event_id: uuid.UUID):
+        with session_factory() as s:
+            ev = s.get(EntryEvent, event_id)
+            if ev is None:
+                raise HTTPException(404, "no such event")
+            src = s.get(WatchedSource, ev.source_id)
+            product = s.get(CatalogProduct, src.product_de_id) if src and src.product_de_id else None
+        return templates.TemplateResponse(request, "event.html", {"ev": ev, "source": src, "product": product})
 
     return app

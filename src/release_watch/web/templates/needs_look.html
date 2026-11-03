@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Needs a look</h1>
+<p class="muted">Events held back by a plausibility gate. "Send" puts them in the next digest; "Dismiss" drops them for good.</p>
+{% if not items %}<p>Nothing waiting.</p>{% else %}
+<form method="post" action="/events/decide">
+<input type="hidden" name="back" value="/needs-look">
+<div class="bar"><button name="decision" value="send">Send selected</button><button name="decision" value="dismiss">Dismiss selected</button></div>
+<table>
+<tr><th></th><th>Vendor</th><th>Kind</th><th>Heading</th><th>Reason</th><th>Age</th></tr>
+{% for it in items %}
+<tr>
+  <td><input type="checkbox" name="ids" value="{{ it.event.id }}"></td>
+  <td>{{ it.source.vendor_name }}<div class="muted">{{ it.source.title or it.source.url }}</div></td>
+  <td><span class="pill">{{ it.event.kind }}</span></td>
+  <td><a href="/events/{{ it.event.id }}">{{ it.event.heading }}</a>{% if it.event.summary %}<div class="muted">{{ it.event.summary }}</div>{% endif %}</td>
+  <td>{{ it.event.reason or "" }}</td>
+  <td>{{ it.age_days }} d</td>
+</tr>
+{% endfor %}
+</table>
+</form>
+{% endif %}
+{% endblock %}

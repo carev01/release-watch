@@ -92,3 +92,70 @@ def test_bad_decision_rejected(client, session_factory):
     target = ids(session_factory, title="Commvault Changelog")
     resp = client.post("/decide", data={"ids": target, "table": "watched", "decision": "delete"})
     assert resp.status_code == 422
+
+
+def add_event(session_factory, heading, status="needs_look", body="body", kind="new", **kw):
+    from release_watch.models import EntryEvent
+
+    with session_factory() as s:
+        src = s.scalars(select(WatchedSource)).first()
+        ev = EntryEvent(source_id=src.id, kind=kind, heading=heading, body=body, status=status,
+                        reason=kw.pop("reason", "too_many_new"), url=src.url, **kw)
+        s.add(ev)
+        s.commit()
+        return str(ev.id)
+
+
+def event_status(session_factory, eid):
+    from release_watch.models import EntryEvent
+
+    with session_factory() as s:
+        return s.get(EntryEvent, eid).status
+
+
+def test_needs_look_lists_events(client, session_factory):
+    add_event(session_factory, "October 28, 2026", summary="Adds X.")
+    add_event(session_factory, "Already sent", status="sent")
+    page = client.get("/needs-look").text
+    assert "October 28, 2026" in page and "too_many_new" in page and "Adds X." in page
+    assert "Already sent" not in page
+    assert "Needs a look (1)" in client.get("/").text
+
+
+def test_send_moves_to_queued(client, session_factory):
+    eid = add_event(session_factory, "A")
+    resp = client.post("/events/decide", data={"ids": [eid], "decision": "send", "back": "/needs-look"},
+                       follow_redirects=False)
+    assert resp.status_code == 303 and resp.headers["location"] == "/needs-look"
+    assert event_status(session_factory, eid) == "queued"
+
+
+def test_dismiss(client, session_factory):
+    eid = add_event(session_factory, "A")
+    client.post("/events/decide", data={"ids": [eid], "decision": "dismiss"}, follow_redirects=False)
+    assert event_status(session_factory, eid) == "dismissed"
+
+
+def test_event_page_shows_verbatim_escaped(client, session_factory):
+    eid = add_event(session_factory, "Edited one", kind="edited", body="<script>alert(1)</script> text",
+                    diff="+* new line")
+    page = client.get(f"/events/{eid}").text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt; text" in page and "<script>alert" not in page
+    assert "+* new line" in page
+
+
+def test_event_page_404(client):
+    assert client.get("/events/00000000-0000-0000-0000-000000000000").status_code == 404
+
+
+def test_invalid_filter_400(client):
+    assert client.get("/?state=bogus").status_code == 400
+    assert client.get("/?label=bogus").status_code == 400
+
+
+def test_back_backslash_rejected(client, session_factory):
+    eid = add_event(session_factory, "A")
+    for back in ("/\\evil.com", "//evil.com", "https://evil.com"):
+        resp = client.post("/events/decide", data={"ids": [eid], "decision": "dismiss", "back": back},
+                           follow_redirects=False)
+        assert resp.headers["location"] == "/needs-look"
