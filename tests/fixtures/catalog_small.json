@@ -1,0 +1,20 @@
+{
+  "vendors": [
+    {"id": "00000000-0000-0000-0000-0000000000a1", "name": "Zerto", "website": "https://zerto.com", "tier_id": null},
+    {"id": "00000000-0000-0000-0000-0000000000a2", "name": "Veeam", "website": "https://veeam.com", "tier_id": null},
+    {"id": "00000000-0000-0000-0000-0000000000a3", "name": "Commvault", "website": "https://commvault.com", "tier_id": null}
+  ],
+  "products": [
+    {"id": "00000000-0000-0000-0000-0000000000b1", "vendor_id": "00000000-0000-0000-0000-0000000000a1", "name": "Zerto", "version": null, "previous_version": null},
+    {"id": "00000000-0000-0000-0000-0000000000b2", "vendor_id": "00000000-0000-0000-0000-0000000000a2", "name": "Veeam ONE", "version": null, "previous_version": null},
+    {"id": "00000000-0000-0000-0000-0000000000b3", "vendor_id": "00000000-0000-0000-0000-0000000000a2", "name": "Veeam Kasten for Kubernetes", "version": null, "previous_version": null},
+    {"id": "00000000-0000-0000-0000-0000000000b4", "vendor_id": "00000000-0000-0000-0000-0000000000a3", "name": "Commvault Cloud", "version": "11.46", "previous_version": "11.44"}
+  ],
+  "sources": [
+    {"id": "00000000-0000-0000-0000-0000000000c1", "product_id": "00000000-0000-0000-0000-0000000000b1", "name": "Zerto Release Notes", "source_type": "web", "base_url": "https://help.zerto.com/rn", "url_template": null, "platform": "zoomin", "auth_realm_id": null, "status": "completed", "last_extracted_at": "2026-10-01T02:00:00Z"},
+    {"id": "00000000-0000-0000-0000-0000000000c2", "product_id": "00000000-0000-0000-0000-0000000000b1", "name": "Zerto Admin Guide", "source_type": "web", "base_url": "https://help.zerto.com/admin", "url_template": null, "platform": "zoomin", "auth_realm_id": null, "status": "completed", "last_extracted_at": null},
+    {"id": "00000000-0000-0000-0000-0000000000c3", "product_id": "00000000-0000-0000-0000-0000000000b2", "name": "Veeam ONE Release Notes", "source_type": "web", "base_url": "https://helpcenter.veeam.com/one/rn", "url_template": null, "platform": "generic", "auth_realm_id": null, "status": "completed", "last_extracted_at": null},
+    {"id": "00000000-0000-0000-0000-0000000000c4", "product_id": "00000000-0000-0000-0000-0000000000b3", "name": "Kasten Docs", "source_type": "web", "base_url": "https://docs.kasten.io/latest", "url_template": null, "platform": "sphinx", "auth_realm_id": null, "status": "completed", "last_extracted_at": null},
+    {"id": "00000000-0000-0000-0000-0000000000c5", "product_id": "00000000-0000-0000-0000-0000000000b4", "name": "Commvault Docs", "source_type": "web", "base_url": "https://documentation.commvault.com/11.46/software/index.html", "url_template": "https://documentation.commvault.com/{version}/software/index.html", "platform": "flare_html5", "auth_realm_id": null, "status": "completed", "last_extracted_at": null}
+  ]
+}
