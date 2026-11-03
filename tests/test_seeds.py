@@ -146,3 +146,10 @@ def test_source_config_skips_rejected(catalog, tmp_path):
         counts = load_seeds(s, write(tmp_path, CONFIG))
         assert s.scalars(select(WatchedSource)).one().selector is None
     assert counts["configured"] == 0
+
+
+def test_source_config_sets_login_walled(catalog, tmp_path):
+    cfg = TWO_ENTRIES + "\nsource_config:\n  - url: https://help.zerto.com/changelog\n    login_walled: true\n"
+    with catalog() as s:
+        load_seeds(s, write(tmp_path, cfg))
+        assert s.scalars(select(WatchedSource)).one().login_walled is True

@@ -115,3 +115,18 @@ def test_json_entries_zendesk():
     assert entries[0].heading == "September 2026"
     assert entries[0].body.startswith("## September 2026") and "New A" in entries[0].body
     assert entries[0].url == "https://h/2" and entries[0].published_at.year == 2026
+
+
+def test_json_entries_join_list_bodies():
+    body = json.dumps({"items": [{"id": 1, "title": "Nov 3", "changes": ["Added A.", "Fixed B."]}]})
+    [entry] = json_entries(body, {"items": "items", "body": "changes", "body_format": "text"})
+    assert entry.body == "## Nov 3\n\n* Added A.\n* Fixed B."
+
+
+def test_json_pick_capture_feeds_url_template():
+    body = json.dumps({"subLinks": [{"title": "10.9", "route": "/bundle/RN.HTML.10.9/page/x"}]})
+    pick = {"type": "json", "items": "subLinks", "title": "title",
+            "capture": {"field": "route", "regex": r"bundle/([^/]+)"},
+            "url_template": "https://help-be.x.com/api/bundle/{_1}/toc"}
+    [kid] = pick_children(body, "application/json", "https://help-be.x.com/api/categories", pick)
+    assert kid.url == "https://help-be.x.com/api/bundle/RN.HTML.10.9/toc"

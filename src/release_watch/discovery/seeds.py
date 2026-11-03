@@ -73,7 +73,7 @@ def load_seeds(session: Session, path: Path) -> dict[str, int]:
     return counts
 
 
-CONFIG_FIELDS = ("selector", "split_rule", "follow", "kind")
+CONFIG_FIELDS = ("selector", "split_rule", "follow", "kind", "login_walled")
 
 
 def _check_follow(index: int, follow: dict) -> None:

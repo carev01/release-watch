@@ -125,7 +125,13 @@ def pick_children(body: str, content_type: str, base_url: str, pick: dict) -> li
             items.sort(key=lambda i: (i.get(pick["order_by"]) is None, i.get(pick["order_by"]) or 0),
                        reverse=pick.get("order", "asc") == "desc")
         kids = []
+        capture = pick.get("capture")
         for item in items:
+            if capture:  # regex groups from one field, usable in url_template as {_1}, {_2}, ...
+                m = re.search(capture["regex"], str(item.get(capture["field"], "")))
+                if not m:
+                    continue
+                item = {**item, **{f"_{i}": g for i, g in enumerate(m.groups(), 1)}}
             if pick.get("url_template"):
                 url = pick["url_template"].format(**item)
             else:
@@ -177,8 +183,13 @@ def json_entries(text: str, rule: dict) -> list[Entry]:
         if not isinstance(item, dict):
             continue
         title = str(item.get(rule.get("title", "title"), "")).strip()
-        raw = str(item.get(rule.get("body", "body")) or "")
-        body = html_to_markdown(raw) if rule.get("body_format", "html") == "html" else raw.strip()
+        raw = item.get(rule.get("body", "body")) or ""
+        if isinstance(raw, list):  # a list of change lines (Gearset)
+            raw = [html_to_markdown(str(x)) if rule.get("body_format", "html") == "html" else str(x).strip()
+                   for x in raw]
+            body = "\n".join(f"* {x}" for x in raw if x)
+        else:
+            body = html_to_markdown(str(raw)) if rule.get("body_format", "html") == "html" else str(raw).strip()
         entries.append(Entry(
             key=str(item.get(rule.get("key", "id"), title)), heading=title, body=f"## {title}\n\n{body}".strip(),
             url=item.get(rule["url"]) if rule.get("url") else None, published_at=_parse_date(item.get(rule.get("date", ""))),
