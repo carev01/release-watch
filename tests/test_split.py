@@ -65,3 +65,9 @@ def test_heading_text_drops_link_and_image_markup():
     assert entry.heading == "Device Version 5.4.5 - Jan 29, 2026"
     assert entry.key == "device version 5.4.5 - jan 29, 2026"
     assert entry.body.startswith("### [](#v5)Device")
+
+
+def test_heading_text_drops_icon_glyphs_and_bold():
+    text = "## **5.4.1**\n\nA\n\n## Bacula Enterprise 18.2.5\n\nB"
+    entries = split_entries(text)
+    assert [e.heading for e in entries] == ["5.4.1", "Bacula Enterprise 18.2.5"]

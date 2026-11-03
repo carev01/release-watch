@@ -130,3 +130,11 @@ def test_json_pick_capture_feeds_url_template():
             "url_template": "https://help-be.x.com/api/bundle/{_1}/toc"}
     [kid] = pick_children(body, "application/json", "https://help-be.x.com/api/categories", pick)
     assert kid.url == "https://help-be.x.com/api/bundle/RN.HTML.10.9/toc"
+
+
+def test_versions_pick_raw_reads_attributes():
+    html = ('<div data-items="[{&quot;path&quot;:&quot;/backup-exec-readme/25-1/x.html&quot;},'
+            '{&quot;path&quot;:&quot;/backup-exec-readme/24-2/y.html&quot;}]"></div>')
+    kids = pick_children(html, "text/html", "https://d.com/", {"type": "versions", "raw": True,
+                                                               "regex": r"backup-exec-readme/(\d+-\d+)/"})
+    assert [k.title for k in kids] == ["25-1", "24-2"]

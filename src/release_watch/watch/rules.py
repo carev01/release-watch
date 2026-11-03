@@ -94,6 +94,8 @@ def _links(body: str, base_url: str, pick: dict) -> list[Child]:
 def _versions(body: str, content_type: str, base_url: str, pick: dict) -> list[Child]:
     if pick.get("json_path"):
         texts = [str(v) for v in json_path(json.loads(body), pick["json_path"])]
+    elif pick.get("raw"):  # match the markup itself, e.g. a JSON version list in a data-items attribute
+        texts = [htmllib.unescape(body)]
     elif "html" in content_type.lower() or body.lstrip().startswith("<"):
         root = LexborHTMLParser(body).body
         texts = [root.text(separator="\n") if root else body]

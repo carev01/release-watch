@@ -34,6 +34,8 @@ def entry_key(heading: str) -> str:
 
 _IMAGE_MD = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _LINK_MD = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+_PRIVATE_USE = re.compile("[\ue000-\uf8ff\u200b]")
+_EMPHASIS = re.compile(r"(\*\*|__)(.+?)\1")
 
 
 def _clean_heading(text: str) -> str:
@@ -41,6 +43,8 @@ def _clean_heading(text: str) -> str:
     text = _IMAGE_MD.sub("", text)
     while _LINK_MD.search(text):
         text = _LINK_MD.sub(r"\1", text)
+    text = _PRIVATE_USE.sub("", text)  # icon-font glyphs (Sphinx permalink \uf0c1)
+    text = _EMPHASIS.sub(r"\2", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
