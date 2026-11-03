@@ -44,7 +44,7 @@ def test_seed_inserts_candidates(catalog, tmp_path):
         counts = load_seeds(s, write(tmp_path, TWO_ENTRIES))
         watched = s.scalars(select(WatchedSource)).one()
         news = s.scalars(select(NewsSource)).one()
-    assert counts == {"watched_new": 1, "news_new": 1, "unchanged": 0, "skipped_rejected": 0}
+    assert counts == {"watched_new": 1, "news_new": 1, "unchanged": 0, "skipped_rejected": 0, "configured": 0}
     assert (watched.state, watched.origin, watched.notes) == ("candidate", "seed", "Public changelog")
     assert watched.product_de_id is not None
     assert (news.state, news.origin, news.kind) == ("candidate", "seed", "listing")
@@ -98,3 +98,51 @@ def test_section_without_selector_errors(catalog, tmp_path):
 def test_seed_malformed_yaml_is_value_error(catalog, tmp_path):
     with catalog() as s, pytest.raises(ValueError, match="not valid YAML"):
         load_seeds(s, write(tmp_path, "watched_sources:\n- vendor: Zerto\nnews_sources:\n  - [unclosed\n"))
+
+
+CONFIG = TWO_ENTRIES + """
+source_config:
+  - url: https://help.zerto.com/changelog/
+    selector: "#content"
+    split_rule: {heading_level: 3}
+    follow: {mode: entry, pick: {type: links, href_regex: "/rn/"}}
+"""
+
+
+def test_source_config_applies_fields(catalog, tmp_path):
+    with catalog() as s:
+        counts = load_seeds(s, write(tmp_path, CONFIG))
+        w = s.scalars(select(WatchedSource)).one()
+    assert counts["configured"] == 1
+    assert (w.selector, w.split_rule, w.follow["mode"]) == ("#content", {"heading_level": 3}, "entry")
+    assert w.title == "Zerto changelog"
+
+
+def test_source_config_only_sets_given_fields(catalog, tmp_path):
+    with catalog() as s:
+        load_seeds(s, write(tmp_path, CONFIG))
+        load_seeds(s, write(tmp_path, TWO_ENTRIES + "\nsource_config:\n  - url: https://help.zerto.com/changelog\n    kind: index_page\n"))
+        w = s.scalars(select(WatchedSource)).one()
+    assert (w.kind, w.selector) == ("index_page", "#content")
+
+
+def test_source_config_unknown_url_raises(catalog, tmp_path):
+    with catalog() as s, pytest.raises(ValueError, match="source_config entry 0: no source with url"):
+        load_seeds(s, write(tmp_path, TWO_ENTRIES + "\nsource_config:\n  - url: https://nope.com/x\n    selector: a\n"))
+
+
+def test_source_config_bad_pick_type_raises(catalog, tmp_path):
+    bad = TWO_ENTRIES + "\nsource_config:\n  - url: https://help.zerto.com/changelog\n    follow: {pick: {type: magic}}\n"
+    with catalog() as s, pytest.raises(ValueError, match="pick.type"):
+        load_seeds(s, write(tmp_path, bad))
+
+
+def test_source_config_skips_rejected(catalog, tmp_path):
+    with catalog() as s:
+        load_seeds(s, write(tmp_path, TWO_ENTRIES))
+        w = s.scalars(select(WatchedSource)).one()
+        w.state = "rejected"
+        s.commit()
+        counts = load_seeds(s, write(tmp_path, CONFIG))
+        assert s.scalars(select(WatchedSource)).one().selector is None
+    assert counts["configured"] == 0

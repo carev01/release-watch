@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from release_watch.models import CatalogProduct, CatalogVendor, NewsSource, WatchedSource
 from release_watch.urls import normalize_url, section_key
+from release_watch.watch.rules import PICK_TYPES
 
 WATCHED_KINDS = {"entry_page", "index_page", "feed", "section"}
 NEWS_KINDS = {"feed", "listing", "github_releases"}
@@ -31,7 +32,7 @@ def load_seeds(session: Session, path: Path) -> dict[str, int]:
         data = yaml.safe_load(path.read_text()) or {}
     except yaml.YAMLError as exc:
         raise ValueError(f"{path} is not valid YAML: {exc}") from exc
-    counts = {"watched_new": 0, "news_new": 0, "unchanged": 0, "skipped_rejected": 0}
+    counts = {"watched_new": 0, "news_new": 0, "unchanged": 0, "skipped_rejected": 0, "configured": 0}
 
     for i, entry in enumerate(data.get("watched_sources") or []):
         product_id = _product_id(session, "watched_sources", i, entry)
@@ -65,8 +66,41 @@ def load_seeds(session: Session, path: Path) -> dict[str, int]:
         session.flush()
         counts["news_new"] += 1
 
+    for i, entry in enumerate(data.get("source_config") or []):
+        _apply_config(session, i, entry, counts)
+
     session.commit()
     return counts
+
+
+CONFIG_FIELDS = ("selector", "split_rule", "follow", "kind")
+
+
+def _check_follow(index: int, follow: dict) -> None:
+    while follow:
+        if "pin" in follow and "pick" not in follow:
+            return
+        if follow.get("pick", {}).get("type") not in PICK_TYPES:
+            raise ValueError(f"source_config entry {index}: follow pick.type must be one of {sorted(PICK_TYPES)}")
+        follow = follow.get("then")
+
+
+def _apply_config(session: Session, index: int, entry: dict, counts: dict[str, int]) -> None:
+    """Per-source watch configuration (Task 12 tuning), applied to an existing source by URL."""
+    key = entry.get("key") or normalize_url(entry["url"])
+    row = session.scalars(select(WatchedSource).where(WatchedSource.url_key == key)).first()
+    if row is None:
+        raise ValueError(f"source_config entry {index}: no source with url {entry['url']!r}")
+    if entry.get("kind") is not None and entry["kind"] not in WATCHED_KINDS:
+        raise ValueError(f"source_config entry {index}: kind must be one of {sorted(WATCHED_KINDS)}")
+    if entry.get("follow"):
+        _check_follow(index, entry["follow"])
+    if row.state == "rejected":
+        return
+    for name in CONFIG_FIELDS:
+        if name in entry:
+            setattr(row, name, entry[name])
+    counts["configured"] += 1
 
 
 def _existing(session: Session, model, key: str, counts: dict[str, int]) -> bool:
