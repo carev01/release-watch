@@ -81,3 +81,29 @@ def test_watch_command_writes_job_run(env):
     assert result.exit_code == 0, result.output
     [run] = jobs(env)
     assert (run.job, run.status, run.counts["sources"]) == ("watch", "ok", 0)
+
+
+class RecordingTeams:
+    def __init__(self):
+        self.cards = []
+
+    async def post(self, card):
+        self.cards.append(card)
+
+
+def test_job_failure_posts_immediate_alert(env, monkeypatch):
+    teams = RecordingTeams()
+    monkeypatch.setattr(cli, "make_teams", lambda settings: teams)
+    monkeypatch.setattr(cli, "make_docextractor_client", lambda settings: FakeDocExtractor(fail_on="products"))
+    result = CliRunner().invoke(cli.app, ["sync"])
+    assert result.exit_code == 1
+    [card] = teams.cards
+    assert card["body"][0]["text"].startswith("Release Watch job sync failed")
+
+
+def test_digest_without_webhook_fails_job(env):
+    result = CliRunner().invoke(cli.app, ["digest"])
+    assert result.exit_code == 1
+    assert "RW_TEAMS_WEBHOOK_URL" in result.output
+    [run] = jobs(env)
+    assert (run.job, run.status) == ("digest", "failed")

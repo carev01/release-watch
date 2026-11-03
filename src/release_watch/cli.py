@@ -19,6 +19,8 @@ from release_watch.docextractor import DocExtractorClient
 from release_watch.fetch import Fetcher
 from release_watch.jobs import job_run
 from release_watch.llm import LLMClient
+from release_watch.notify.digest import run_digest
+from release_watch.notify.teams import Teams, TeamsError
 from release_watch.watch.run import run_watch
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -38,6 +40,11 @@ def make_llm(settings: Settings) -> LLMClient:
     return LLMClient(settings)
 
 
+def make_teams(settings: Settings) -> Teams | None:
+    url = settings.teams_webhook_url.get_secret_value()
+    return Teams(url) if url else None
+
+
 def _session_factory(settings: Settings):
     return make_session_factory(make_engine(settings.database_url))
 
@@ -51,8 +58,22 @@ def _run(job: str, body) -> None:
             counts.update(asyncio.run(body(settings, session_factory)))
     except Exception as exc:
         typer.echo(f"{job} failed: {type(exc).__name__}: {exc}", err=True)
+        _alert_failure(settings, job, exc)
         raise typer.Exit(1)
     typer.echo(json.dumps(counts, default=str))
+
+
+def _alert_failure(settings: Settings, job: str, exc: Exception) -> None:
+    """Immediate Teams message for a job that failed outright (spec 9). Never masks the original failure."""
+    teams = make_teams(settings)
+    if teams is None:
+        return
+    from release_watch.notify.cards import text_card
+
+    try:
+        asyncio.run(teams.post(text_card(f"Release Watch job {job} failed: {type(exc).__name__}")))
+    except TeamsError as alert_exc:
+        typer.echo(f"failure alert not sent: {alert_exc}", err=True)
 
 
 async def _sync(settings, session_factory) -> dict:
@@ -100,6 +121,21 @@ def watch(only: str = typer.Option(None, help="Only sources whose URL or vendor 
         typer.echo(json.dumps(counts), err=True)
         return
     _run("watch", body)
+
+
+@app.command()
+def digest(dry_run: bool = typer.Option(False, "--dry-run", help="Print the cards as JSON; send nothing.")) -> None:
+    """Send the daily Teams digest: new versions, new and edited entries, and health."""
+
+    async def body(settings, session_factory) -> dict:
+        return await run_digest(session_factory, None if dry_run else make_teams(settings),
+                                web_base_url=settings.web_base_url, now=datetime.now(UTC), dry_run=dry_run)
+
+    if dry_run:
+        settings = get_settings()
+        typer.echo(json.dumps(asyncio.run(body(settings, _session_factory(settings)))), err=True)
+        return
+    _run("digest", body)
 
 
 @app.command()
