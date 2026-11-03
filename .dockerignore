@@ -1,0 +1,7 @@
+.secrets
+.env
+.git
+.venv
+.superpowers
+tests
+__pycache__
