@@ -122,3 +122,27 @@ async def test_label_pending_skips_labelled_unless_relabel(session_factory):
     fetcher = FakeFetcher({"https://x.com/rn": page("feed.xml", content_type="application/atom+xml")})
     assert (await label_pending(session_factory, fetcher, FakeLLM())) == {}
     assert (await label_pending(session_factory, fetcher, FakeLLM(), relabel=True)) == {"release_notes": 1}
+
+
+async def test_label_pending_keeps_seed_kind(session_factory):
+    with session_factory() as s:
+        row = source("https://keepit.com/updates", kind="section")
+        row.origin, row.selector = "seed", "#updates"
+        s.add(row)
+        s.commit()
+    llm = FakeLLM(reply={"label": "release_notes", "kind": "entry_page", "evidence": "October 28, 2026"})
+    fetcher = FakeFetcher({"https://keepit.com/updates": page("changelog.html", "https://keepit.com/updates")})
+    await label_pending(session_factory, fetcher, llm)
+    with session_factory() as s:
+        row = s.scalars(select(WatchedSource)).one()
+    assert (row.label, row.kind) == ("release_notes", "section")
+
+
+async def test_label_pending_refines_heuristic_kind(session_factory):
+    with session_factory() as s:
+        s.add(source(kind="entry_page"))
+        s.commit()
+    llm = FakeLLM(reply={"label": "release_notes", "kind": "index_page", "evidence": "October 28, 2026"})
+    await label_pending(session_factory, FakeFetcher({"https://x.com/rn": page("changelog.html")}), llm)
+    with session_factory() as s:
+        assert s.scalars(select(WatchedSource)).one().kind == "index_page"

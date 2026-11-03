@@ -117,7 +117,9 @@ async def label_pending(session_factory, fetcher, llm, *, relabel: bool = False)
             continue
         with session_factory() as s:
             row = s.get(WatchedSource, source_id)
-            row.label, row.kind, row.label_reason = label.label, label.kind, label.reason
+            row.label, row.label_reason = label.label, label.reason
+            if row.origin != "seed":  # a hand-set kind (e.g. section) is not the LLM's to change
+                row.kind = label.kind
             row.label_evidence, row.labelled_at = label.evidence[:2000], datetime.now(UTC)
             s.commit()
         counts[label.label] = counts.get(label.label, 0) + 1

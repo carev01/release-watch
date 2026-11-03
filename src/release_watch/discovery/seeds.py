@@ -27,7 +27,10 @@ def _product_id(session: Session, section: str, index: int, entry: dict):
 
 
 def load_seeds(session: Session, path: Path) -> dict[str, int]:
-    data = yaml.safe_load(path.read_text()) or {}
+    try:
+        data = yaml.safe_load(path.read_text()) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{path} is not valid YAML: {exc}") from exc
     counts = {"watched_new": 0, "news_new": 0, "unchanged": 0, "skipped_rejected": 0}
 
     for i, entry in enumerate(data.get("watched_sources") or []):

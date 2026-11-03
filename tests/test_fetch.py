@@ -117,3 +117,16 @@ async def test_min_delay_between_requests_to_same_host():
                              f.fetch("https://paced.com/3"))
         elapsed = asyncio.get_running_loop().time() - start
     assert elapsed >= 0.4
+
+
+@respx.mock
+async def test_browser_headers_sent_with_default_ua():
+    route = respx.get("https://example.com/").mock(return_value=httpx.Response(200, text="x" * 5000))
+    ibm = respx.get("https://www.ibm.com/docs/x").mock(return_value=httpx.Response(200, text="x" * 5000))
+    async with Fetcher(settings(), policies=fast_policies()) as f:
+        await f.fetch("https://example.com/")
+        await f.fetch("https://www.ibm.com/docs/x")
+    headers = route.calls[0].request.headers
+    assert headers["Sec-Fetch-Mode"] == "navigate"
+    assert headers["Accept-Language"].startswith("en")
+    assert "Sec-Fetch-Mode" not in ibm.calls[0].request.headers

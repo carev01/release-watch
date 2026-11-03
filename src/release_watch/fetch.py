@@ -17,6 +17,15 @@ RETRY_STATUSES = {429, 503}
 SHORT_PAGE_BYTES = 1000
 LOGIN_PATTERN = re.compile(r"(^|[./_-])(login|signin|sign-in|sso|auth|oauth)([./_?=-]|$)|/account/", re.I)
 
+BROWSER_HEADERS = {
+    "Accept-Language": "en-US,en;q=0.9",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+}
+
 Outcome = Literal["ok", "blocked", "gone", "error"]
 
 
@@ -105,6 +114,9 @@ class Fetcher:
         sem = self._semaphores.setdefault(host, asyncio.Semaphore(policy.max_concurrency))
         headers = {"User-Agent": policy.user_agent or self._settings.user_agent,
                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}
+        if policy.user_agent is None:
+            # Some WAFs (Red Hat docs, Cohesity and Commvault IR) 403 a browser UA without the rest of the headers.
+            headers.update(BROWSER_HEADERS)
         async with sem:
             for attempt in range(ATTEMPTS):
                 await self._pace(host, policy)

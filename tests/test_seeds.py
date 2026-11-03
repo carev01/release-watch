@@ -93,3 +93,8 @@ def test_section_without_selector_errors(catalog, tmp_path):
     bad = "watched_sources:\n  - {vendor: Zerto, url: 'https://help.zerto.com/u', kind: section}\n"
     with catalog() as s, pytest.raises(ValueError, match="selector"):
         load_seeds(s, write(tmp_path, bad))
+
+
+def test_seed_malformed_yaml_is_value_error(catalog, tmp_path):
+    with catalog() as s, pytest.raises(ValueError, match="not valid YAML"):
+        load_seeds(s, write(tmp_path, "watched_sources:\n- vendor: Zerto\nnews_sources:\n  - [unclosed\n"))

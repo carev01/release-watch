@@ -6,16 +6,331 @@
 # vendor (and product, if given) must match DocExtractor's names exactly.
 
 watched_sources:
-  - vendor: Velero
-    product: Velero
-    url: https://github.com/vmware-tanzu/velero/releases.atom
-    kind: feed
-    title: Velero releases
-    notes: "GitHub releases Atom feed (open source)"
+- vendor: AWS
+  product: AWS Backup
+  url: https://docs.aws.amazon.com/aws-backup/latest/devguide/backup-dg-rss-updates.rss
+  kind: feed
+  selector: null
+  title: AWS Backup Developer Guide document history (RSS)
+  notes: 'Official RSS of the doc-history table (new features land here). HTTP 200, latest item 29 Oct 2026. HTML
+    equivalent: https://docs.aws.amazon.com/aws-backup/latest/devguide/doc-history.html'
+- vendor: CloudAlly
+  product: CloudAlly for MS 365
+  url: https://support.cloudally.com/api/v2/help_center/en-us/sections/360005942919/articles.json?sort_by=created_at&sort_order=desc
+  kind: index_page
+  selector: null
+  title: CloudAlly Product Release Notes (Zendesk section, JSON)
+  notes: Zendesk Help Center API listing of the 'Product Release Notes' section. HTTP 200 JSON, newest is August
+    '26 Release Notes (2026-08-17). The HTML section https://support.cloudally.com/hc/en-us/sections/360005942919-Product-Release-Notes
+    and its .atom feed return 403 (Cloudflare challenge) to non-browser clients.
+- vendor: Eon
+  product: Eon
+  url: https://docs.eon.io/whats-new/product-updates
+  kind: entry_page
+  selector: null
+  title: Eon product updates
+  notes: 'LOGIN-WALLED: redirects to console.eon.io/login. Recorded for reference only. The public API changelog
+    is the next entry.'
+- vendor: Eon
+  product: Eon
+  url: https://docs.eon.io/whats-new/api-changelog
+  kind: index_page
+  selector: null
+  title: Eon API Changelog
+  notes: Public index of dated API changelog pages (/whats-new/api-changelog/YYYY/M/D). HTTP 200, newest is 29 Oct
+    2026. Covers the API only, not the full product. A markdown index is at https://docs.eon.io/whats-new/api-changelog/llms.txt
+- vendor: Flosum
+  product: Backup and Archive (B&A)
+  url: https://docs.flosum.com/release-notes/backup-and-archive/monthly-releases
+  kind: index_page
+  selector: null
+  title: Flosum Backup & Archive monthly release notes
+  notes: GitBook index with one page per version. HTTP 200, links v4.4.0 through v4.8.8. No RSS found.
+- vendor: Flosum
+  product: Backup and Archive (B&A)
+  url: https://docs.flosum.com/release-notes/backup-and-archive/seasonal-releases
+  kind: index_page
+  selector: null
+  title: Flosum Backup & Archive seasonal release notes
+  notes: GitBook index of the seasonal (major) releases. HTTP 200, lists Spring 2025 v4.1.0, Summer 2025 v4.3.0
+    and Winter 2026 v4.5.0. /release-notes/backup-and-archive redirects here.
+- vendor: Gearset
+  product: Gearset
+  url: https://app.gearset.com/frontend/changelog/1
+  kind: entry_page
+  selector: null
+  title: Gearset changelog (JSON, page 1)
+  notes: Public JSON ({ChangelogItems:[{Date,Changes[]}]}) behind the in-app changelog at https://app.gearset.com/changelog,
+    which is a JS-only SPA shell. Linked from gearset.com/roadmap. HTTP 200 without login, newest entry 3 Nov 2026.
+    Releases happen several times a week.
+- vendor: Google
+  product: Google Cloud Backup and DR
+  url: https://docs.cloud.google.com/feeds/backupdr-release-notes.xml
+  kind: feed
+  selector: null
+  title: Backup and DR release notes (Atom)
+  notes: 'Official Atom feed linked from the release-notes page. HTTP 200, latest entry 30 Oct 2026. HTML: https://cloud.google.com/backup-disaster-recovery/docs/release-notes
+    (now redirects to docs.cloud.google.com).'
+- vendor: Nakivo
+  product: Nakivo Backup & Replication
+  url: https://helpcenter.nakivo.com/Release-Notes/Content/Release-Notes.htm
+  kind: entry_page
+  selector: null
+  title: NAKIVO Release Notes
+  notes: Version and release-date table. HTTP 200, newest is v11.2.3 (30 Sep 2026).
+- vendor: Red Hat
+  product: OADP
+  url: https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/backup_and_restore/oadp-application-backup-and-restore
+  kind: entry_page
+  selector: null
+  title: OADP release notes (OCP 4.22 Backup and restore, chapter 'OADP Application backup and restore')
+  notes: 'Single-page chapter containing ''OADP release notes'' (1.6, 1.6.0, 1.6.1). HTTP 200 (~1 MB). docs.redhat.com
+    returns 403 unless browser-like Accept/Sec-Fetch headers are sent. The URL is pinned to OCP 4.22: the /latest/
+    alias timed out, so bump the version when a new OCP ships.'
+- vendor: Slide
+  product: Slide
+  url: https://docs.slide.tech/releases/
+  kind: entry_page
+  selector: null
+  title: Slide Releases (Agent, API, Box, Console)
+  notes: Single page with versioned, dated entries ('Released on ...'). HTTP 200, newest entries dated Nov 2, 2026.
+    No RSS found.
+- vendor: Synology
+  product: Active Backup
+  url: https://www.synology.com/api/releaseNote/findChangeLog?identify=ActiveBackup&lang=en-global
+  kind: entry_page
+  selector: null
+  title: Active Backup for Business release notes (JSON)
+  notes: 'JSON that feeds https://www.synology.com/en-global/releaseNote/ActiveBackup (the HTML is a JS shell with
+    no entries). HTTP 200, newest is 3.2.2-25554 (2026-10-12). Related agent notes: identify=ActiveBackupBusinessAgent.'
+- vendor: Synology
+  product: ActiveProtect Manager
+  url: https://www.synology.com/api/releaseNote/findChangeLog?identify=APM&lang=en-global
+  kind: entry_page
+  selector: null
+  title: ActiveProtect Manager (APM) release notes (JSON)
+  notes: 'JSON that feeds https://www.synology.com/en-global/releaseNote/APM (JS shell). HTTP 200, newest is 2.0.1-88106
+    (2026-10-13). releaseNote/ActiveProtectManager redirects to the download center. Agent notes: identify=ActiveProtectAgent.'
+- vendor: Velero
+  product: Velero
+  url: https://github.com/velero-io/velero/releases.atom
+  kind: feed
+  selector: null
+  title: Velero GitHub releases (Atom)
+  notes: 'HTTP 200 Atom, newest is v1.18.4. CAVEAT: now redirects to https://github.com/velero-io/velero/releases.atom
+    (the repo moved org). Consider storing the new URL.'
+- vendor: Rubrik
+  product: Rubrik Security Cloud
+  url: https://developer.rubrik.com/Rubrik-Security-Cloud-API/API-Reference/Changelog/
+  kind: entry_page
+  selector: null
+  title: Rubrik Security Cloud GraphQL Schema Changelog
+  notes: 'Public substitute: the official weekly RSC API changelog (breaking changes, additions). HTTP 200, newest
+    is October 26, 2026. Large page (~1 MB). The real release notes (docs.rubrik.com/en-us/saas/saas/release_notes.html)
+    redirect to the onepassport.rubrik.com login and were not logged into.'
+- vendor: Cohesity
+  product: NetBackup
+  url: https://docs.cohesity.com/docs/netbackup
+  kind: index_page
+  selector: null
+  title: NetBackup Documentation (version index incl. Release Notes)
+  notes: 'PUBLIC on the otherwise login-walled docs.cohesity.com. HTTP 200, shows ''Version: 11.2.0.1 (Latest)''
+    and links the per-version NetBackup Release Notes (e.g. /docs/netbackup/11.2.0.1/103228346-173151032-0, verified
+    HTTP 200 with content). A new version will change this page.'
+- vendor: Cohesity
+  product: Helios
+  url: https://developers.cohesity.com/v1.0/page/changelog
+  kind: entry_page
+  selector: null
+  title: Cohesity API Changelogs (Helios / Cluster APIs)
+  notes: 'Public substitute: dated API changelog entries per Helios monthly release and cluster version (e.g. ''Helios
+    2026 August to September'', ''7.4 to 7.5'', 2026-09-21). HTTP 200. DataProtect and Helios docs on docs.cohesity.com
+    show ''requires authentication'' and were not logged into. No public DataProtect release notes on vendor domains.'
+- vendor: Veeam
+  product: Veeam Data Cloud
+  url: https://www.veeam.com/services/change-log/list?product=vdc&offset=0&limit=6
+  kind: entry_page
+  selector: null
+  title: Veeam Data Cloud Changelog
+  notes: JSON behind https://www.veeam.com/veeam-data-cloud/change-log.html (the HTML page is empty without JavaScript)
+- vendor: Veeam
+  product: Veeam Kasten for Kubernetes
+  url: https://docs.kasten.io/latest/releasenotes/
+  kind: entry_page
+  selector: null
+  title: Veeam Kasten Release Notes
+  notes: Single page with versioned, dated entries. HTTP 200, newest is 9.0.10 (2026-10-29).
+- vendor: Veeam
+  product: Securiti.ai
+  url: https://docs.securiti.ai/release-notes
+  kind: entry_page
+  selector: null
+  title: Securiti release notes
+  notes: 'LOGIN-WALLED: redirects to app.securiti.ai/#/?redirectToDoc=/release-notes (app login). No public release
+    notes found on securiti.ai (the /release-notes/ and /whats-new/ paths are 404). Recorded for reference only.'
+- vendor: Keepit
+  product: Keepit
+  url: https://www.keepit.com/help/product-updates/
+  kind: section
+  selector: '#updates'
+  title: What's new in the Keepit Platform
+  notes: Section of the product-updates page. HTTP 200, newest is 10.27.0 (Oct 22, 2026).
+- vendor: Keepit
+  product: Keepit
+  url: https://www.keepit.com/help/product-updates/
+  kind: section
+  selector: '#pmc'
+  title: What's new in the Keepit Partner Management Console (PMC)
+  notes: Section of the product-updates page. HTTP 200, newest is 10.24.0 (August 20, 2026).
+- vendor: AvePoint
+  product: null
+  url: https://learn.avepoint.com/solution-pages/release-notes.html
+  kind: entry_page
+  selector: null
+  title: AvePoint Learn - Latest Updates (release notes landing)
+  notes: 'Public landing page (HTTP 200): ''Release notes, what''s new, and what''s coming'', currently headlines
+    the AvePoint Cloud October 2026 Release. The release-note pages it links to are login-walled.'
+- vendor: AvePoint
+  product: null
+  url: https://learn.avepoint.com/aos-release-notes/new-features-and-improvements.html
+  kind: entry_page
+  selector: null
+  title: AvePoint Online Services - New features and improvements
+  notes: 'LOGIN-WALLED: redirects to /login?returnUrl=... Main AOS release notes. Other release notes follow the
+    pattern learn.avepoint.com/<product>-release-notes/... and learn.avepoint.com/release-notes/ also redirects
+    to login.'
 
 news_sources:
-  - vendor: Commvault
-    product: null
-    url: https://www.commvault.com/news
-    kind: listing
-    notes: "Press releases"
+- vendor: Arcserve
+  product: null
+  url: https://www.arcserve.com/press-releases/rss.xml
+  kind: feed
+  notes: Official press-release RSS (linked from /press-releases head). Newest item 2026-10-30. Carried the UDP
+    11 launch announcement.
+- vendor: Arcserve
+  product: null
+  url: https://www.arcserve.com/blog/rss.xml
+  kind: feed
+  notes: Arcserve blog RSS. Newest item 2026-10-26. Mostly thought-leadership; occasional product posts.
+- vendor: Arctera
+  product: null
+  url: https://www.arctera.com/newsroom
+  kind: listing
+  notes: 'Arctera press-release listing (arctera.io now redirects to arctera.com). Static HTML, newest item 2026-08-26.
+    Caveat: Cloud Software Group acquired Arctera (closed 2025-12) and the site now covers compliance/Enterprise
+    Vault. Backup Exec, DLO and SR sales moved to Cognizant (backupexec.com, cognizant.com/backupexec), and neither
+    has a news listing.'
+- vendor: Atempo
+  product: null
+  url: https://www.atempo.com/feed/
+  kind: feed
+  notes: WordPress RSS for the whole site, mostly blog posts tagged miria/tina/lina. Newest item 2026-10-22. There
+    is no separate press-release feed.
+- vendor: Atempo
+  product: null
+  url: https://www.atempo.com/news-events/
+  kind: listing
+  notes: News & Events page, updated 2026-10-28. Press releases are linked as PDFs (newest is a Dec 2025 PDF), so
+    it is weak as a listing. /news-events/feed/ is empty.
+- vendor: CloudAlly
+  product: CloudAlly for MS 365
+  url: https://support.cloudally.com/hc/en-us/sections/360005942919
+  kind: listing
+  notes: Zendesk 'Product Release Notes' section, one post per release (newest 'August '26 Release Notes', 2026-08-17).
+    JSON is also available at /api/v2/help_center/en-us/articles.json?sort_by=created_at&sort_order=desc. CloudAlly
+    is now OpenText. cloudally.com redirects to cybersecurity.opentext.com, which returned a Vercel 429 checkpoint
+    and could not be verified.
+- vendor: CloudAlly
+  product: null
+  url: https://www.opentext.com/about/press-release-listing
+  kind: listing
+  notes: OpenText (owner) press-release listing, HTTP 200, page generated 2026-10-16. Very noisy across all of OpenText.
+    Fallback only.
+- vendor: Cohesity
+  product: null
+  url: https://www.cohesity.com/bin/cohesity/pressrss/
+  kind: feed
+  notes: Cohesity newsroom RSS. Newest item 2026-10-26. Covers NetBackup too after the Veritas merger. Akamai returns
+    403 unless full browser headers are sent (Accept, Sec-Fetch-*, Accept-Encoding).
+- vendor: Cohesity
+  product: null
+  url: https://www.cohesity.com/bin/cohesity/blogsrss/
+  kind: feed
+  notes: Cohesity blog RSS (/feed/ redirects here). Newest item 2026-10-28. Same Akamai header caveat.
+- vendor: Commvault
+  product: null
+  url: https://ir.commvault.com/rss/news-releases.xml
+  kind: feed
+  notes: Commvault IR press-release RSS. Newest item 2026-10-28. Returns 403 without full browser headers.
+- vendor: Commvault
+  product: null
+  url: https://www.commvault.com/newsroom
+  kind: listing
+  notes: Commvault newsroom HTML listing (/news redirects here). Links to /news/... posts including platform release
+    announcements. Newest seen is Q2 FY2027 results (Oct 2026).
+- vendor: Commvault
+  product: null
+  url: https://www.commvault.com/feed
+  kind: feed
+  notes: Commvault blog RSS. Newest item 2026-11-03. Mostly editorial/security content.
+- vendor: Dell
+  product: null
+  url: https://investors.delltechnologies.com/news-events/press-releases/rss
+  kind: feed
+  notes: Dell Technologies IR press-release RSS (10 items). Newest item 2026-10-27. Corporate-wide and noisy. The
+    www.dell.com newsroom announcements page renders with JS, so it was not usable.
+- vendor: Dell
+  product: null
+  url: https://www.dell.com/en-us/blog/feed/
+  kind: feed
+  notes: Dell Technologies blog RSS. Newest item 2026-11-03. Covers all product lines, so expect many non-PPDM posts.
+    No storage/PowerProtect category feed found (category and tag URLs 404).
+- vendor: HYCU
+  product: null
+  url: https://www.hycu.com/blog/rss.xml
+  kind: feed
+  notes: HYCU blog RSS. Newest item 2026-11-02. Includes 'What's new in HYCU R-Cloud' posts.
+- vendor: HYCU
+  product: null
+  url: https://www.hycu.com/company/newsroom/press-release
+  kind: listing
+  notes: HYCU press-release listing. Newest item 2026-10-08. No press RSS (/rss.xml is empty and the press-release
+    rss.xml returns 404).
+- vendor: Red Hat
+  product: OADP
+  url: https://www.redhat.com/en/rss/blog/channel/red-hat-openshift
+  kind: feed
+  notes: Red Hat OpenShift blog channel RSS. Newest item 2026-10-30. OADP releases are only occasionally blogged.
+    openshift/oadp-operator GitHub releases/tags stop at v1.2.0 (2023), so it is not usable as a source.
+- vendor: Red Hat
+  product: null
+  url: https://www.redhat.com/en/rss/press-releases
+  kind: feed
+  notes: Red Hat press-release RSS. Newest item 2026-10-29. Corporate-wide. OADP is unlikely to get its own press
+    release.
+- vendor: Velero
+  product: Velero
+  url: https://github.com/velero-io/velero/releases
+  kind: github_releases
+  notes: Repo moved from vmware-tanzu/velero to velero-io/velero (old URL redirects; Velero is now a CNCF Sandbox
+    project). Atom feed is at /releases.atom. Newest is v1.18.4 (2026-09). Includes -rc pre-releases, which should
+    be filtered out.
+- vendor: Velero
+  product: Velero
+  url: https://velero.io/blog/index.xml
+  kind: feed
+  notes: Velero project blog RSS. Newest item 2026-07-30 (CNCF Sandbox). Has minor-release posts such as 'Velero
+    1.18', but posts are infrequent.
+- vendor: Zerto
+  product: Zerto
+  url: https://community.hpe.com/hpeb/rss/board?board.id=aroundthestorageblock
+  kind: feed
+  notes: HPE 'Around the Storage Block' blog RSS. zerto.com/blog now redirects here and zerto.com/feed redirects
+    to the HPE product page. Newest item 2026-11-03. Includes 'HPE Zerto Software v10.9' posts among general HPE
+    storage posts.
+- vendor: Zerto
+  product: null
+  url: https://www.hpe.com/us/en/newsroom/rss.xml
+  kind: feed
+  notes: HPE newsroom RSS. Newest item 2026-11-03. Corporate-wide and very noisy, so Zerto items will be rare. Fallback
+    only.
