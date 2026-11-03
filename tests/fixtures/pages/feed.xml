@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Release notes from velero</title>
+  <id>tag:github.com,2008:https://github.com/vmware-tanzu/velero/releases</id>
+  <updated>2026-10-20T00:00:00Z</updated>
+  <entry><id>1</id><title>v1.18.0</title><updated>2026-10-20T00:00:00Z</updated><content>Highlights</content></entry>
+  <entry><id>2</id><title>v1.17.2</title><updated>2026-09-01T00:00:00Z</updated><content>Fixes</content></entry>
+  <entry><id>3</id><title>v1.17.1</title><updated>2026-08-01T00:00:00Z</updated><content>Fixes</content></entry>
+</feed>
