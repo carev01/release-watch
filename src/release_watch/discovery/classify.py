@@ -7,13 +7,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import feedparser
-import trafilatura
-from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import select
 
 from release_watch.fetch import FetchResult
 from release_watch.llm import LLMError
 from release_watch.models import WatchedSource
+from release_watch.watch.extract import extract_markdown
 
 LLM_TEXT_CHARS = 12_000
 MAX_PARALLEL = 8
@@ -42,11 +41,7 @@ class Label:
 
 
 def extract_text(html: str, url: str) -> str:
-    text = trafilatura.extract(html, url=url, output_format="markdown", include_links=True)
-    if text:
-        return text
-    body = LexborHTMLParser(html).body
-    return body.text(separator="\n", strip=True) if body else ""
+    return extract_markdown(html, url)
 
 
 def looks_like_feed(result: FetchResult) -> bool:
