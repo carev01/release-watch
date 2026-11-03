@@ -14,7 +14,7 @@ from release_watch.watch.extract import body_hash, extract_markdown
 from release_watch.watch.readers import ReadResult, read_source
 from release_watch.watch.rules import version_tuple
 from release_watch.watch.split import VERSION_RE
-from release_watch.watch.successor import propose_successors
+from release_watch.watch.successor import on_successor_baseline, propose_successors
 from release_watch.watch.summary import summarize
 
 MAX_PARALLEL = 8
@@ -163,7 +163,7 @@ def _settle_first(sf, src, state: _State, result: ReadResult, at: datetime, coun
             s.add(Snapshot(source_id=row.id, markdown=result.markdown, hash=body_hash(result.markdown)))
             row.suspect_streak, row.last_ok_at = 0, at
             _attempt(s, row, "baseline", result)
-            _supersede_predecessor(s, row)
+            on_successor_baseline(s, row)
             counts["baseline"] += 1
         else:
             changes = compare(state.known, result.entries)
@@ -214,12 +214,6 @@ def _write_entries(s, row, changes: Changes, at: datetime, *, new: list | None =
     for values in rows.values():
         s.add(Entry(source_id=row.id, **values))
     row.suspect_streak, row.last_ok_at = 0, at
-
-
-def _supersede_predecessor(s, row) -> None:
-    """A successor's baseline retires the version-pinned source it replaces (spec 7.1)."""
-    s.execute(update(WatchedSource).where(WatchedSource.superseded_by == row.id, WatchedSource.state == "active")
-              .values(state="superseded"))
 
 
 async def _settle_confirmed(sf, fetcher, llm, p: _Pending, second: ReadResult, at, counts) -> None:

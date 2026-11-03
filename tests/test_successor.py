@@ -48,9 +48,7 @@ async def test_successor_created_when_signal_newer(session_factory):
     assert (new.state, new.origin, new.follow["pin"]["version"]) == ("active", "successor", "8.2.2")
     assert new.title == "Storage Protect 8.2.2 what's new" and new.selector == "main"
     assert sources(session_factory)[OLD].superseded_by == new.id
-    [ev] = events(session_factory)
-    assert (ev.kind, ev.status, ev.url) == ("moved", "queued", NEW)
-    assert ev.heading == "Release-notes URL for IBM (Storage Protect 8.2.1 what's new) moved to 8.2.2"
+    assert events(session_factory) == []  # the moved line waits for the successor's baseline
     assert old_id
 
 
@@ -86,7 +84,7 @@ async def test_moved_event_deduped(session_factory):
 
 async def test_old_source_superseded_after_successor_baseline(session_factory):
     setup(session_factory)
-    old_page = "<h2>8.2.1 (October 2026)</h2><p>Old.</p>"
+    old_page = "<h2>8.2.1 (October 2026)</h2>" + "<p>Old feature for the 8.2.1 release.</p>" * 10
     import json
 
     from release_watch.fetch import FetchResult
@@ -99,6 +97,52 @@ async def test_old_source_superseded_after_successor_baseline(session_factory):
     await run_watch(session_factory, fetcher, SummaryLLM(), confirm_delay=0)  # successor baseline
     assert sources(session_factory)[OLD].state == "superseded"
     assert sources(session_factory)[NEW].state == "active"
+    [ev] = events(session_factory)
+    assert (ev.kind, ev.status, ev.url, ev.version) == ("moved", "queued", NEW, "8.2.2")
+    assert ev.heading == "Release-notes URL for IBM (Storage Protect 8.2.1 what's new) moved to 8.2.2"
+
+
+async def test_no_moved_line_when_successor_baseline_fails(session_factory):
+    import json
+
+    from release_watch.fetch import FetchResult
+    setup(session_factory)
+    sig_body = json.dumps({"v": ["8.2.2", "8.2.1"]})
+    sig = FetchResult(SIGNAL, SIGNAL, 200, "application/json", sig_body, len(sig_body), "ok", "")
+    fetcher = ScriptedFetcher({SIGNAL: sig, OLD: html_page(OLD, "<h2>8.2.1 (October 2026)</h2>" + "<p>Old feature text.</p>" * 20),
+                               NEW: [html_page(NEW, GOOD), html_page(NEW, "", status=403, outcome="blocked",
+                                                                     reason="forbidden")]})
+    await run_watch(session_factory, fetcher, SummaryLLM(), confirm_delay=0)
+    await run_watch(session_factory, fetcher, SummaryLLM(), confirm_delay=0)
+    assert events(session_factory) == []
+    assert sources(session_factory)[OLD].state == "active"
+
+
+async def test_successor_rejects_redirect_elsewhere(session_factory):
+    from release_watch.fetch import FetchResult
+    setup(session_factory)
+    text = f"<html><body><main>{GOOD}</main></body></html>"
+    moved = FetchResult(NEW, "https://ibm.com/docs/sp/landing", 200, "text/html", text, len(text), "ok", "")
+    await propose_successors(session_factory, ScriptedFetcher({NEW: moved}), NOW)
+    assert NEW not in sources(session_factory)
+
+
+async def test_successor_rejects_not_found_wording(session_factory):
+    setup(session_factory)
+    body = "<h1>Page not found</h1><p>The topic for 8.2.2 does not exist.</p>" + "<p>Browse the docs.</p>" * 20
+    await propose_successors(session_factory, ScriptedFetcher({NEW: html_page(NEW, body)}), NOW)
+    assert NEW not in sources(session_factory)
+
+
+async def test_successor_rejects_size_mismatch_with_old_snapshot(session_factory):
+    from release_watch.models import Snapshot
+    setup(session_factory)
+    with session_factory() as s:
+        old = s.scalar(select(WatchedSource).where(WatchedSource.url == OLD))
+        s.add(Snapshot(source_id=old.id, markdown="x" * 20_000, hash="h"))
+        s.commit()
+    await propose_successors(session_factory, ScriptedFetcher({NEW: html_page(NEW, GOOD)}), NOW)
+    assert NEW not in sources(session_factory)
 
 
 async def test_moved_heading_names_the_product(session_factory):
@@ -111,6 +155,8 @@ async def test_moved_heading_names_the_product(session_factory):
         s.add(CatalogProduct(de_id=pid, vendor_de_id=_uuid.uuid4(), name="Storage Protect", synced_at=NOW))
         s.query(WatchedSource).filter(WatchedSource.url == OLD).update({"product_de_id": pid})
         s.commit()
-    await propose_successors(session_factory, ScriptedFetcher({NEW: html_page(NEW, GOOD)}), NOW)
-    [ev] = events(session_factory)
-    assert ev.heading == "Release-notes URL for IBM Storage Protect (Storage Protect 8.2.1 what's new) moved to 8.2.2"
+    from release_watch.watch.successor import moved_heading
+    with session_factory() as s:
+        old = s.scalar(select(WatchedSource).where(WatchedSource.url == OLD))
+        assert moved_heading(s, old, "8.2.2") == \
+            "Release-notes URL for IBM Storage Protect (Storage Protect 8.2.1 what's new) moved to 8.2.2"
