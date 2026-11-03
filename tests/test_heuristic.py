@@ -172,3 +172,20 @@ async def test_toc_branch_row_follows_new_first_child(session_factory):
         rows = s.scalars(select(WatchedSource).where(WatchedSource.de_source_id == uuid.UUID(ZERTO_ADMIN))).all()
     assert len(rows) == 1
     assert rows[0].url == "https://help.zerto.com/admin/rn/10.5"
+
+
+async def test_same_titled_branches_stay_separate(session_factory):
+    def branch(prefix):
+        return toc_entry("Release Notes", None, [toc_entry("1", f"https://help.zerto.com/admin/{prefix}/1"),
+                                                 toc_entry("2", f"https://help.zerto.com/admin/{prefix}/2")])
+    fake = FakeDocExtractor(tocs={ZERTO_ADMIN: [toc_entry("Server", None, [branch("server")]),
+                                                toc_entry("Agent", None, [branch("agent")])]})
+    await seeded(session_factory, fake)
+    with session_factory() as s:
+        first = upsert_proposals(s, (await propose_candidates(fake, s))[0])
+        again = upsert_proposals(s, (await propose_candidates(fake, s))[0])
+        urls = sorted(r.url for r in s.scalars(
+            select(WatchedSource).where(WatchedSource.de_source_id == uuid.UUID(ZERTO_ADMIN))))
+    assert first["new"] == 3  # the two branches, plus the "Zerto Release Notes" source itself
+    assert (again["existing"], again["moved"], again["conflict"]) == (3, 0, 0)
+    assert urls == ["https://help.zerto.com/admin/agent/1", "https://help.zerto.com/admin/server/1"]

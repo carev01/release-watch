@@ -7,6 +7,7 @@ Matching TOC titles *and* URLs finds the same pages, since search hits matching 
 import logging
 import re
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -122,29 +123,33 @@ async def propose_candidates(client, session: Session) -> tuple[list[Proposal], 
     return list(proposals.values()), len(toc_errors)
 
 
-def _same_proposal(session: Session, p: Proposal) -> WatchedSource | None:
+def _same_proposal(session: Session, p: Proposal, ambiguous: set) -> WatchedSource | None:
     """The row this proposal already is, matched on identity that survives URL changes."""
     q = select(WatchedSource)
     if p.de_article_id:
         return session.scalars(q.where(WatchedSource.de_article_id == uuid.UUID(p.de_article_id))).first()
-    if not p.de_source_id:
+    if not p.de_source_id or (p.de_source_id, p.reason, p.title) in ambiguous:
         return None
     # Whole sources move on version bumps; index branches change URL when a newer release is added on top.
     q = q.where(WatchedSource.de_source_id == uuid.UUID(p.de_source_id),
                 WatchedSource.discovery_reason == p.reason, WatchedSource.de_article_id.is_(None))
     if p.reason == "toc":
         q = q.where(WatchedSource.title == p.title)
-    return session.scalars(q).first()
+    rows = session.scalars(q.limit(2)).all()
+    return rows[0] if len(rows) == 1 else None
 
 
 def upsert_proposals(session: Session, proposals: list[Proposal]) -> dict[str, int]:
     counts = {"new": 0, "existing": 0, "moved": 0, "skipped_rejected": 0, "conflict": 0}
     walled = {str(s.de_id) for s in session.scalars(
         select(CatalogSource).where(CatalogSource.auth_realm_id.is_not(None)))}
+    # Two TOC branches titled alike in one source can't be told apart by title; match those by URL only.
+    seen = Counter((p.de_source_id, p.reason, p.title) for p in proposals if not p.de_article_id)
+    ambiguous = {k for k, n in seen.items() if n > 1}
     for p in proposals:
         key = normalize_url(p.url)
         at_key = session.scalars(select(WatchedSource).where(WatchedSource.url_key == key)).first()
-        row = _same_proposal(session, p)
+        row = _same_proposal(session, p, ambiguous)
         if row and row.url_key != key:
             if at_key:  # another row already owns the new URL; leave both as they are
                 counts["conflict"] += 1
