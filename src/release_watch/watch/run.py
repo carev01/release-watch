@@ -14,6 +14,7 @@ from release_watch.watch.extract import body_hash, extract_markdown
 from release_watch.watch.readers import ReadResult, read_source
 from release_watch.watch.rules import version_tuple
 from release_watch.watch.split import VERSION_RE
+from release_watch.watch.successor import propose_successors
 from release_watch.watch.summary import summarize
 
 MAX_PARALLEL = 8
@@ -117,6 +118,7 @@ async def run_watch(session_factory, fetcher, llm, *, confirm_delay: float, now:
         again = await asyncio.gather(*(read(p.source) for p in pending))
         for p, second in zip(pending, again):
             await _settle_confirmed(session_factory, fetcher, llm, p, second, now(), counts)
+    counts["successors"] = await propose_successors(session_factory, fetcher, now())
     return counts
 
 
