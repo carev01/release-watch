@@ -283,3 +283,39 @@ async def test_version_page_reports_highest_new_version_even_if_ascending(sessio
     await run(session_factory, ScriptedFetcher({URL: page(["11.40", "11.42", "11.44"])}))
     assert [e.version for e in events(session_factory)] == ["11.44"]
     assert json and FetchResult
+
+
+async def test_version_page_baseline_reports_a_version_newer_than_docextractor(session_factory):
+    import json
+
+    from release_watch.fetch import FetchResult
+    pid = uuid.uuid4()
+    with session_factory() as s:
+        s.add(CatalogProduct(de_id=pid, vendor_de_id=uuid.uuid4(), name="Resiliency Platform", de_version="10.3",
+                             synced_at=datetime(2026, 11, 3, tzinfo=UTC)))
+        s.commit()
+    add_source(session_factory, kind="index_page", follow={"pick": {"type": "versions", "json_path": "v"}},
+               product_de_id=pid)
+    text = json.dumps({"v": ["10.4", "10.3"]})
+    page = FetchResult(URL, URL, 200, "application/json", text, len(text), "ok", "")
+    await run(session_factory, ScriptedFetcher({URL: page}))
+    await run(session_factory, ScriptedFetcher({URL: page}))
+    [ev] = events(session_factory)
+    assert (ev.kind, ev.version, ev.status) == ("version", "10.4", "queued")
+    assert ev.heading == "Example released a new version of Resiliency Platform: 10.4"
+
+
+async def test_version_page_baseline_quiet_when_docextractor_is_current(session_factory):
+    import json
+
+    from release_watch.fetch import FetchResult
+    pid = uuid.uuid4()
+    with session_factory() as s:
+        s.add(CatalogProduct(de_id=pid, vendor_de_id=uuid.uuid4(), name="P", de_version="10.4",
+                             synced_at=datetime(2026, 11, 3, tzinfo=UTC)))
+        s.commit()
+    add_source(session_factory, kind="index_page", follow={"pick": {"type": "versions", "json_path": "v"}},
+               product_de_id=pid)
+    text = json.dumps({"v": ["10.4", "10.3"]})
+    await run(session_factory, ScriptedFetcher({URL: FetchResult(URL, URL, 200, "application/json", text, len(text), "ok", "")}))
+    assert events(session_factory) == []

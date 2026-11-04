@@ -138,6 +138,27 @@ watched_sources:
     and links the per-version NetBackup Release Notes (e.g. /docs/netbackup/11.2.0.1/103228346-173151032-0, verified
     HTTP 200 with content). A new version will change this page.'
 - vendor: Cohesity
+  product: NetBackup Flex Appliance
+  url: https://docs.cohesity.com/docs/flexappliances
+  kind: index_page
+  title: Flex Appliance documentation (version index)
+  notes: 'Like the NetBackup page: shows ''Version: N (Latest)''. Release-notes URLs carry per-version document ids,
+    so a new version is caught here, not by guessing its URL (added 2026-11-04).'
+- vendor: Cohesity
+  product: NetBackup IT Analytics
+  url: https://docs.cohesity.com/docs/netbackupitanalytics
+  kind: index_page
+  title: IT Analytics documentation (version index)
+  notes: 'Like the NetBackup page: shows ''Version: N (Latest)''. Release-notes URLs carry per-version document ids,
+    so a new version is caught here, not by guessing its URL (added 2026-11-04).'
+- vendor: Cohesity
+  product: NetBackup Resiliency Platform
+  url: https://docs.cohesity.com/docs/resiliencyplatform
+  kind: index_page
+  title: Resiliency Platform documentation (version index)
+  notes: 'Like the NetBackup page: shows ''Version: N (Latest)''. Release-notes URLs carry per-version document ids,
+    so a new version is caught here, not by guessing its URL (added 2026-11-04).'
+- vendor: Cohesity
   product: Helios
   url: https://developers.cohesity.com/v1.0/page/changelog
   kind: entry_page
@@ -1273,3 +1294,9 @@ source_config:
 - url: "https://www.hornetsecurity.com/en/blog/release-notes/release-notes-vm-backup-en/feed/"
   kind: "index_page"
   follow: {"mode": "entry", "pick": {"type": "feed"}, "child_selector": "main section.wp-block-verdure-section:not(.alignwide)"}
+- url: "https://docs.cohesity.com/docs/flexappliances"
+  follow: {"pick": {"type": "versions", "regex": "(\\d+(?:\\.\\d+)+)\\s*\\(Latest\\)"}}
+- url: "https://docs.cohesity.com/docs/netbackupitanalytics"
+  follow: {"pick": {"type": "versions", "regex": "(\\d+(?:\\.\\d+)+)\\s*\\(Latest\\)"}}
+- url: "https://docs.cohesity.com/docs/resiliencyplatform"
+  follow: {"pick": {"type": "versions", "regex": "(\\d+(?:\\.\\d+)+)\\s*\\(Latest\\)"}}

@@ -164,6 +164,7 @@ def _settle_first(sf, src, state: _State, result: ReadResult, at: datetime, coun
             row.suspect_streak, row.last_ok_at = 0, at
             _attempt(s, row, "baseline", result)
             on_successor_baseline(s, row)
+            _baseline_versions(s, row, result.entries)
             counts["baseline"] += 1
         else:
             changes = compare(state.known, result.entries)
@@ -314,10 +315,27 @@ async def _build_events(sf, fetcher, src, mode: str, changes: Changes) -> list[E
     if found:
         version, entry, status, reason = max(found, key=lambda f: version_tuple(f[0]))
         if not (product and product.de_version and version_tuple(version) <= version_tuple(product.de_version)):
-            name = product.name if product else (src.title or src.url)
-            scope = src.product_de_id or src.id
-            events.append(EntryEvent(
-                id=uuid.uuid4(), source_id=src.id, kind="version", version=version, product_de_id=src.product_de_id,
-                heading=f"{src.vendor_name} released a new version of {name}: {version}", url=entry.url or src.url,
-                dedupe_key=f"version:{src.vendor_name}:{scope}:{version}", status=status, reason=reason))
+            events.append(_version_event(src, product, version, entry.url or src.url, status, reason))
     return events
+
+
+def _version_event(src, product, version: str, url: str, status: str = "queued", reason: str | None = None):
+    name = product.name if product else (src.title or src.url)
+    scope = src.product_de_id or src.id
+    return EntryEvent(
+        id=uuid.uuid4(), source_id=src.id, kind="version", version=version, product_de_id=src.product_de_id,
+        heading=f"{src.vendor_name} released a new version of {name}: {version}", url=url,
+        dedupe_key=f"version:{src.vendor_name}:{scope}:{version}", status=status, reason=reason)
+
+
+def _baseline_versions(s, row, entries) -> None:
+    """A version list read for the first time may already show a release DocExtractor doesn't have yet."""
+    product = s.get(CatalogProduct, row.product_de_id) if row.product_de_id else None
+    versions = [e.key for e in entries if version_tuple(e.key)]
+    if _mode(row) != "versions" or not (product and product.de_version and versions):
+        return
+    top = max(versions, key=version_tuple)
+    if version_tuple(top) > version_tuple(product.de_version):
+        ev = _version_event(row, product, top, row.url)
+        if not s.scalar(select(func.count()).select_from(EntryEvent).where(EntryEvent.dedupe_key == ev.dedupe_key)):
+            s.add(ev)
