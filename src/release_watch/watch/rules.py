@@ -12,13 +12,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import urljoin
 
+import feedparser
 from selectolax.lexbor import LexborHTMLParser
 
 from release_watch.urls import normalize_url
 from release_watch.watch.extract import html_to_markdown
 from release_watch.watch.split import VERSION_RE, Entry
 
-PICK_TYPES = {"links", "sitemap", "json", "versions"}
+PICK_TYPES = {"links", "sitemap", "json", "versions", "feed"}
 _SEGMENT = re.compile(r"^([^\[\]]+)(?:\[([^=\]]+)=([^\]]*)\])?$")
 
 
@@ -143,6 +144,10 @@ def pick_children(body: str, content_type: str, base_url: str, pick: dict) -> li
         return _dedupe(kids)
     if kind == "versions":
         return _versions(body, content_type, base_url, pick)
+    if kind == "feed":  # a feed whose items are short teasers: each item's page holds the release notes
+        items = feedparser.parse(body).entries
+        return _dedupe([Child(urljoin(base_url, i.get("link", "")), i.get("title", "").strip(), None)
+                        for i in items if i.get("link")])
     raise ValueError(f"unknown pick type {kind!r}")
 
 

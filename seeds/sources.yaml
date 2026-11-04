@@ -1266,3 +1266,10 @@ source_config:
 - url: "https://www.keepit.com/help/product-updates/"
   selector: "#updates"
   split_rule: {heading_regex: "^\\d+\\.\\d+(\\.\\d+)?\\s*[–-]\\s*[A-Za-z]+\\.? \\d"}
+# Hornetsecurity feeds carry a one-line teaser per release; each item's page has the full notes (owner, 2026-11-04)
+- url: "https://www.hornetsecurity.com/en/blog/release-notes/release-notes-365-total-backup-en/feed/"
+  kind: "index_page"
+  follow: {"mode": "entry", "pick": {"type": "feed"}, "child_selector": "main section.wp-block-verdure-section:not(.alignwide)"}
+- url: "https://www.hornetsecurity.com/en/blog/release-notes/release-notes-vm-backup-en/feed/"
+  kind: "index_page"
+  follow: {"mode": "entry", "pick": {"type": "feed"}, "child_selector": "main section.wp-block-verdure-section:not(.alignwide)"}

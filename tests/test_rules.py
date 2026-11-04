@@ -138,3 +138,14 @@ def test_versions_pick_raw_reads_attributes():
     kids = pick_children(html, "text/html", "https://d.com/", {"type": "versions", "raw": True,
                                                                "regex": r"backup-exec-readme/(\d+-\d+)/"})
     assert [k.title for k in kids] == ["25-1", "24-2"]
+
+
+def test_feed_pick_lists_item_links():
+    from release_watch.watch.rules import pick_children
+    rss = """<?xml version="1.0"?><rss version="2.0"><channel><title>RN</title>
+      <item><title>VM Backup Version 9.21.0.0</title><link>https://h.com/rn/vm-backup-9-21-0-0/</link><description>short</description></item>
+      <item><title>VM Backup Version 9.20.0.0</title><link>https://h.com/rn/vm-backup-9-20-0-0/</link><description>short</description></item>
+    </channel></rss>"""
+    kids = pick_children(rss, "application/rss+xml", "https://h.com/feed/", {"type": "feed"})
+    assert [(k.url, k.title) for k in kids] == [("https://h.com/rn/vm-backup-9-21-0-0/", "VM Backup Version 9.21.0.0"),
+                                                ("https://h.com/rn/vm-backup-9-20-0-0/", "VM Backup Version 9.20.0.0")]
