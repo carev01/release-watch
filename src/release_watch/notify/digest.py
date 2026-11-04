@@ -17,14 +17,18 @@ from release_watch.notify.cards import entry_cards, envelope, summary_card, text
 STALE_WATCH = timedelta(hours=26)
 
 
-def _named_product(vendor: str, bodies: list[str]) -> str | None:
-    """The product name the page text uses most, e.g. "IBM Storage Defender Copy Data Management"."""
+def _named_product(vendor: str, product: str | None, bodies: list[str]) -> str | None:
+    """The product name the page text uses most, e.g. "IBM Storage Defender Copy Data Management".
+
+    Only names containing the tracked product count, so "IBM FlashSystem" on a Storage Protect page doesn't.
+    """
     found = re.compile(rf"\b{re.escape(vendor)} ((?:(?:[A-Z][\w-]*|for|and|&) )*[A-Z][\w-]*)")
-    names = Counter(m.group(1) for body in bodies for m in found.finditer(body[:2000].replace("®", "")))
+    names = Counter(m.group(1) for body in bodies for m in found.finditer(body[:2000].replace("®", ""))
+                    if product is None or product.casefold() in m.group(1).casefold())
     return f"{vendor} {names.most_common(1)[0][0]}" if names else None
 
 
-def _page_title(s, src: WatchedSource | None) -> str | None:
+def _page_title(s, src: WatchedSource | None, products: dict) -> str | None:
     """The page's own top heading (e.g. "What's new for IBM Storage Protect for Mail"), else the source title.
 
     A heading that doesn't name the vendor ("What's new") gets the product the page text names in front.
@@ -34,10 +38,11 @@ def _page_title(s, src: WatchedSource | None) -> str | None:
     bodies = list(s.scalars(select(Entry.body).where(Entry.source_id == src.id, Entry.removed_at.is_(None))))
     title = next((b.lstrip().split("\n", 1)[0][2:].strip() for b in bodies if b.lstrip().startswith("# ")),
                  src.title)
-    if title and src.vendor_name.casefold() not in title.casefold() and (product := _named_product(src.vendor_name,
-                                                                                                   bodies)):
-        return f"{product}: {title}"
-    return title
+    if not title or src.vendor_name.casefold() in title.casefold():
+        return title
+    tracked = products.get(src.product_de_id)
+    named = _named_product(src.vendor_name, tracked.name if tracked else None, bodies)
+    return f"{named}: {title}" if named else title
 
 
 def _link(text: str, url: str | None) -> str:
@@ -55,7 +60,7 @@ def _group_lines(s, events: list, sources: dict, products: dict) -> list[str]:
         else:
             by_url.setdefault((ev.url, ev.version), []).append(ev)
     for (url, version), evs in by_url.items():
-        title = _page_title(s, sources.get(evs[0].source_id)) or evs[0].heading
+        title = _page_title(s, sources.get(evs[0].source_id), products) or evs[0].heading
         if version:
             merged = f" (replaces {len(evs)} older pages)" if len(evs) > 1 else ""
             lines.append(f"{_link(title, url)} is the {version} page{merged}")

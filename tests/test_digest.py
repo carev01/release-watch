@@ -227,3 +227,21 @@ def test_generic_page_heading_gets_the_product_the_page_names(session_factory):
     summary = preview_digest(session_factory, web_base_url="http://rw", now=NOW)[-1]
     assert any("- [IBM Storage Defender Copy Data Management: What's new](https://ibm.com/scdm/2.3.2) is the 2.3.2 "
                "page" in b["text"] for b in summary["body"])
+
+
+def test_named_product_must_be_the_tracked_product(session_factory):
+    pid = uuid.uuid4()
+    with session_factory() as s:
+        s.add(CatalogProduct(de_id=pid, vendor_de_id=uuid.uuid4(), name="Storage Protect", synced_at=NOW))
+        src = WatchedSource(vendor_name="IBM", product_de_id=pid, url="https://ibm.com/sps", url_key="https://ibm.com/sps",
+                            title="What's new for Oracle", kind="entry_page", state="active", origin="successor")
+        s.add(src)
+        s.flush()
+        s.add(Entry(source_id=src.id, key="k", heading="New in 8.2.1", body_hash="h",
+                    body="## New in IBM Storage Protect Snapshot 8.2.1\n\nIBM FlashSystem snapshots on IBM FlashSystem."))
+        s.add(EntryEvent(source_id=src.id, kind="moved", version="8.2.2", product_de_id=pid, url=src.url,
+                         heading="x", status="queued"))
+        s.commit()
+    summary = preview_digest(session_factory, web_base_url="http://rw", now=NOW)[-1]
+    assert any("- [IBM Storage Protect Snapshot: What's new for Oracle](https://ibm.com/sps)" in b["text"]
+               for b in summary["body"])
