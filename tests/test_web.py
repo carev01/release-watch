@@ -159,3 +159,23 @@ def test_back_backslash_rejected(client, session_factory):
         resp = client.post("/events/decide", data={"ids": [eid], "decision": "dismiss", "back": back},
                            follow_redirects=False)
         assert resp.headers["location"] == "/needs-look"
+
+
+def test_notifications_shows_next_digest_and_past_ones(client, session_factory):
+    from datetime import UTC, datetime
+
+    from release_watch.models import Digest
+    from release_watch.notify.cards import _card, _text
+
+    add_event(session_factory, "Queued entry heading", status="queued", body="## Queued entry heading\n\nNew **bold** text")
+    with session_factory() as s:
+        s.add(Digest(created_at=datetime(2026, 11, 3, 8, tzinfo=UTC), channel="web", cards=[
+            _card([_text("**Past card** with [a link](https://acme.com/rn) and [bad](javascript:alert(1))")],
+                  "https://acme.com/rn")]))
+        s.commit()
+    page = client.get("/notifications").text
+    assert "Next digest" in page and "Queued entry heading" in page and "<strong>bold</strong>" in page
+    assert "Tue 03 Nov 2026" in page and "<strong>Past card</strong>" in page
+    assert '<a href="https://acme.com/rn"' in page and 'href="javascript' not in page
+    assert "Open page" in page
+    assert '<a href="/notifications">' in client.get("/").text

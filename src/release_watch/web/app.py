@@ -11,9 +11,12 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select, text
 
-from release_watch.models import LABEL, SOURCE_STATE, CatalogProduct, EntryEvent, NewsSource, WatchedSource
+from release_watch.models import LABEL, SOURCE_STATE, CatalogProduct, Digest, EntryEvent, NewsSource, WatchedSource
+from release_watch.notify.digest import preview_digest
+from release_watch.web.cards import card_html
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+templates.env.filters["card_html"] = card_html
 
 NEW_STATE = {"confirm": "active", "reject": "rejected", "reset": "candidate"}
 EVENT_DECISION = {"send": "queued", "dismiss": "dismissed"}
@@ -26,7 +29,7 @@ def _safe_back(back: str, default: str) -> str:
     return default
 
 
-def create_app(session_factory) -> FastAPI:
+def create_app(session_factory, web_base_url: str = "") -> FastAPI:
     app = FastAPI(title="Release Watch")
 
     def needs_look_count() -> int:
@@ -105,6 +108,14 @@ def create_app(session_factory) -> FastAPI:
                 ev.status, ev.decided_at = EVENT_DECISION[decision], now
             s.commit()
         return RedirectResponse(_safe_back(back, "/needs-look"), status_code=303)
+
+    @app.get("/notifications")
+    def notifications(request: Request):
+        now = datetime.now(UTC)
+        upcoming = preview_digest(session_factory, web_base_url=web_base_url, now=now)
+        with session_factory() as s:
+            past = list(s.scalars(select(Digest).order_by(Digest.created_at.desc()).limit(14)))
+        return templates.TemplateResponse(request, "notifications.html", {"upcoming": upcoming, "past": past})
 
     @app.get("/events/{event_id}")
     def event_page(request: Request, event_id: uuid.UUID):

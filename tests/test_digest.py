@@ -7,8 +7,8 @@ import pytest
 import respx
 from sqlalchemy import select
 
-from release_watch.models import EntryEvent, JobRun, WatchedSource
-from release_watch.notify.digest import run_digest
+from release_watch.models import Digest, EntryEvent, JobRun, WatchedSource
+from release_watch.notify.digest import preview_digest, run_digest
 from release_watch.notify.teams import Teams, TeamsError
 
 HOOK = "https://prod.westus.logic.azure.com/workflows/abc/triggers/manual/paths/invoke?sig=SECRETSIG"
@@ -62,7 +62,7 @@ async def test_digest_sends_summary_then_entries(session_factory):
     assert len(texts) == 3
     assert "Acme released a new version of Box: 2.0" in texts[0] and "Acme: 2 new" in texts[0]
     assert "Entry 0" in texts[1] and "Sum 0" in texts[1] and "Entry 1" in texts[2]
-    assert counts == {"cards": 3, "events_sent": 3}
+    assert counts == {"cards": 3, "events_sent": 3, "channel": "teams"}
     st = statuses(session_factory)
     assert st["Held"] == "needs_look"
     assert {st["Entry 0"], st["Entry 1"], st["Acme released a new version of Box: 2.0"]} == {"sent"}
@@ -109,10 +109,35 @@ async def test_digest_dry_run_changes_nothing(session_factory):
     assert "sent" not in statuses(session_factory).values()
 
 
-async def test_digest_without_webhook_fails(session_factory):
+async def test_digest_without_webhook_is_kept_for_the_web_ui(session_factory):
     seed(session_factory)
-    with pytest.raises(TeamsError, match="RW_TEAMS_WEBHOOK_URL"):
-        await run_digest(session_factory, None, web_base_url="http://rw", now=NOW)
+    counts = await run_digest(session_factory, None, web_base_url="http://rw", now=NOW)
+    assert counts == {"cards": 3, "events_sent": 3, "channel": "web"}
+    st = statuses(session_factory)
+    assert st["Entry 0"] == "sent" and st["Held"] == "needs_look"
+    with session_factory() as s:
+        [d] = s.scalars(select(Digest)).all()
+    assert d.channel == "web" and len(d.cards) == 3 and d.created_at == NOW
+    assert "Entry 0" in json.dumps(d.cards[1])
+
+
+@respx.mock
+async def test_digest_sent_to_teams_is_kept_too(session_factory):
+    seed(session_factory)
+    respx.post(HOOK).mock(return_value=httpx.Response(202))
+    await run_digest(session_factory, teams(), web_base_url="http://rw", now=NOW)
+    with session_factory() as s:
+        [d] = s.scalars(select(Digest)).all()
+    assert d.channel == "teams" and len(d.cards) == 3
+
+
+async def test_preview_changes_nothing(session_factory):
+    seed(session_factory)
+    cards = preview_digest(session_factory, web_base_url="http://rw", now=NOW)
+    assert len(cards) == 3 and "Entry 1" in json.dumps(cards[2])
+    assert "sent" not in statuses(session_factory).values()
+    with session_factory() as s:
+        assert s.scalars(select(Digest)).all() == []
 
 
 @respx.mock

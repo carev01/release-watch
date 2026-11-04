@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Notifications</h1>
+<p class="muted">What the daily digest sends, card by card, as Teams would show it. While no Teams webhook is set,
+the 08:00 digest is kept here instead of posted.</p>
+
+<h2>Next digest (if it ran now)</h2>
+{% for card in upcoming %}{{ card | card_html }}{% endfor %}
+
+<h2>Past digests</h2>
+{% if not past %}<p>None yet.</p>{% endif %}
+{% for d in past %}
+<details{% if loop.first %} open{% endif %}>
+<summary>{{ d.created_at.strftime("%a %d %b %Y %H:%M UTC") }} · {{ d.cards | length }} card{{ "" if d.cards | length == 1 else "s" }} · {{ "kept here" if d.channel == "web" else "sent to Teams" }}</summary>
+{% for card in d.cards %}{{ card | card_html }}{% endfor %}
+</details>
+{% endfor %}
+{% endblock %}

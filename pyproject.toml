@@ -20,6 +20,7 @@ dependencies = [
     "pyyaml>=6.0",
     "typer>=0.15",
     "markdownify>=0.14",
+    "markdown-it-py>=3.0",
 ]
 
 [project.scripts]

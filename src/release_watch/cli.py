@@ -20,7 +20,7 @@ from release_watch.fetch import Fetcher
 from release_watch.jobs import job_run
 from release_watch.llm import LLMClient
 from release_watch.notify.digest import run_digest
-from release_watch.notify.teams import Teams, TeamsError
+from release_watch.notify.teams import Teams
 from release_watch.watch.run import run_watch
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -58,22 +58,27 @@ def _run(job: str, body) -> None:
             counts.update(asyncio.run(body(settings, session_factory)))
     except Exception as exc:
         typer.echo(f"{job} failed: {type(exc).__name__}: {exc}", err=True)
-        _alert_failure(settings, job, exc)
+        _alert_failure(settings, session_factory, job, exc)
         raise typer.Exit(1)
     typer.echo(json.dumps(counts, default=str))
 
 
-def _alert_failure(settings: Settings, job: str, exc: Exception) -> None:
-    """Immediate Teams message for a job that failed outright (spec 9). Never masks the original failure."""
-    teams = make_teams(settings)
-    if teams is None:
-        return
+def _alert_failure(settings: Settings, session_factory, job: str, exc: Exception) -> None:
+    """Immediate message for a job that failed outright (spec 9): to Teams, or kept for the web UI while no
+    webhook is set. Never masks the original failure."""
+    from release_watch.models import Digest
     from release_watch.notify.cards import text_card
 
+    card = text_card(f"Release Watch job {job} failed: {type(exc).__name__}")
+    teams = make_teams(settings)
     try:
-        asyncio.run(teams.post(text_card(f"Release Watch job {job} failed: {type(exc).__name__}")))
-    except TeamsError as alert_exc:
-        typer.echo(f"failure alert not sent: {alert_exc}", err=True)
+        if teams is not None:
+            asyncio.run(teams.post(card))
+        with session_factory() as s:
+            s.add(Digest(channel="teams" if teams else "web", cards=[card]))
+            s.commit()
+    except Exception as alert_exc:
+        typer.echo(f"failure alert not sent: {type(alert_exc).__name__}: {alert_exc}", err=True)
 
 
 async def _sync(settings, session_factory) -> dict:
@@ -125,7 +130,8 @@ def watch(only: str = typer.Option(None, help="Only sources whose URL or vendor 
 
 @app.command()
 def digest(dry_run: bool = typer.Option(False, "--dry-run", help="Print the cards as JSON; send nothing.")) -> None:
-    """Send the daily Teams digest: new versions, new and edited entries, and health."""
+    """Send the daily digest (new versions, new and edited entries, health) to Teams, or keep it for the
+    web UI's Notifications page while no webhook is set."""
 
     async def body(settings, session_factory) -> dict:
         return await run_digest(session_factory, None if dry_run else make_teams(settings),
@@ -158,7 +164,8 @@ def web(host: str = "0.0.0.0", port: int = 8000) -> None:
 
     from release_watch.web.app import create_app
 
-    uvicorn.run(create_app(_session_factory(get_settings())), host=host, port=port)
+    settings = get_settings()
+    uvicorn.run(create_app(_session_factory(settings), web_base_url=settings.web_base_url), host=host, port=port)
 
 
 @app.command()

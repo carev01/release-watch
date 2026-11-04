@@ -101,9 +101,19 @@ def test_job_failure_posts_immediate_alert(env, monkeypatch):
     assert card["body"][0]["text"].startswith("Release Watch job sync failed")
 
 
-def test_digest_without_webhook_fails_job(env):
+def test_digest_without_webhook_goes_to_the_web_ui(env):
     result = CliRunner().invoke(cli.app, ["digest"])
-    assert result.exit_code == 1
-    assert "RW_TEAMS_WEBHOOK_URL" in result.output
+    assert result.exit_code == 0, result.output
+    assert '"channel": "web"' in result.output
     [run] = jobs(env)
-    assert (run.job, run.status) == ("digest", "failed")
+    assert (run.job, run.status) == ("digest", "ok")
+
+
+def test_failure_alert_without_webhook_is_kept_for_the_web_ui(env, monkeypatch):
+    from release_watch.models import Digest
+
+    monkeypatch.setattr(cli, "make_docextractor_client", lambda settings: FakeDocExtractor(fail_on="products"))
+    assert CliRunner().invoke(cli.app, ["sync"]).exit_code == 1
+    with env() as s:
+        [d] = s.scalars(select(Digest)).all()
+    assert d.channel == "web" and d.cards[0]["body"][0]["text"].startswith("Release Watch job sync failed")

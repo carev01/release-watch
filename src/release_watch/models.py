@@ -190,3 +190,13 @@ class EntryEvent(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cards_sent: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+class Digest(Base):
+    """A daily digest as delivered: to Teams, or kept for the web UI while no webhook is set."""
+
+    __tablename__ = "digest"
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    channel: Mapped[str] = mapped_column(String(16))  # "teams" | "web"
+    cards: Mapped[list] = mapped_column(JSONB)
