@@ -10,12 +10,14 @@ import uuid
 from collections import Counter
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from release_watch.models import CatalogProduct, CatalogSource, CatalogVendor, WatchedSource
+from release_watch.models import (CatalogProduct, CatalogSource, CatalogVendor, Entry, EntryEvent, Snapshot,
+                                  WatchedSource)
 from release_watch.docextractor import DocExtractorError
 from release_watch.urls import normalize_url
+from release_watch.watch.successor import source_name
 
 log = logging.getLogger(__name__)
 
@@ -139,6 +141,23 @@ def _same_proposal(session: Session, p: Proposal, ambiguous: set) -> WatchedSour
     return rows[0] if len(rows) == 1 else None
 
 
+def _follow_docextractor_move(session: Session, row: WatchedSource) -> None:
+    """DocExtractor now reads this page at a new URL (usually a version bump): watch the new page from a fresh
+    baseline, settle any "may have moved" item the watch was holding, and send one line saying so."""
+    name = source_name(session, row)
+    session.execute(delete(Entry).where(Entry.source_id == row.id))
+    session.execute(delete(Snapshot).where(Snapshot.source_id == row.id))
+    row.suspect_streak = 0
+    for ev in session.scalars(select(EntryEvent).where(EntryEvent.source_id == row.id, EntryEvent.kind == "moved",
+                                                       EntryEvent.status == "needs_look")):
+        ev.status, ev.dedupe_key = "dismissed", None
+    dedupe = f"moved:{row.id}:{row.url_key}"
+    if not session.scalar(select(func.count()).select_from(EntryEvent).where(EntryEvent.dedupe_key == dedupe)):
+        session.add(EntryEvent(source_id=row.id, kind="moved", product_de_id=row.product_de_id, url=row.url,
+                               heading=f"Release-notes URL for {name} moved: DocExtractor now uses the new URL",
+                               dedupe_key=dedupe, status="queued"))
+
+
 def upsert_proposals(session: Session, proposals: list[Proposal]) -> dict[str, int]:
     counts = {"new": 0, "existing": 0, "moved": 0, "skipped_rejected": 0, "conflict": 0}
     walled = {str(s.de_id) for s in session.scalars(
@@ -155,6 +174,8 @@ def upsert_proposals(session: Session, proposals: list[Proposal]) -> dict[str, i
                 counts["conflict"] += 1
                 continue
             row.url, row.url_key = p.url, key
+            if row.state == "active":
+                _follow_docextractor_move(session, row)
             session.flush()
             counts["moved"] += 1
             continue

@@ -21,7 +21,7 @@ web:
 
 cron:
   sync: "0 5 * * *"
-  discover: "30 5 * * 1"
+  discover: "30 5 * * *"
   watch: "0 6 * * *"
   digest: "0 8 * * *"
   deadlineSeconds: 10800

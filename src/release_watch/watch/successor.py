@@ -49,12 +49,14 @@ def check_successor(result, old_url: str, selector: str | None, template: str, v
     return (None if needle in text else "successor_no_version"), preview
 
 
+def source_name(s, src: WatchedSource) -> str:
+    product = s.get(CatalogProduct, src.product_de_id) if src.product_de_id else None
+    name = f"{src.vendor_name} {product.name}" if product else src.vendor_name
+    return f"{name} ({src.title})" if src.title else name
+
+
 def moved_heading(s, old: WatchedSource, version: str) -> str:
-    product = s.get(CatalogProduct, old.product_de_id) if old.product_de_id else None
-    name = f"{old.vendor_name} {product.name}" if product else old.vendor_name
-    if old.title:
-        name = f"{name} ({old.title})"
-    return f"Release-notes URL for {name} moved to {version}"
+    return f"Release-notes URL for {source_name(s, old)} moved to {version}"
 
 
 def on_successor_baseline(s, new: WatchedSource, version: str | None = None) -> None:

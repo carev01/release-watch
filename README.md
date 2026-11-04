@@ -11,7 +11,7 @@ and a web review queue where the owner confirms or rejects each one.
 | Command | What it does | Schedule in the cluster |
 | --- | --- | --- |
 | `release-watch sync` | Mirror DocExtractor's vendors, products and sources | daily 05:00 |
-| `release-watch discover [--relabel]` | Sync, propose candidates, fetch and label them | Mondays 05:30 |
+| `release-watch discover [--relabel]` | Sync, propose candidates, fetch and label them, follow DocExtractor URL changes | Daily 05:30 |
 | `release-watch seed seeds/sources.yaml` | Load hand-researched sources as candidates | by hand |
 | `release-watch web` | Review queue on :8000, `/healthz` | Deployment |
 | `release-watch migrate` | `alembic upgrade head` | web init container |
@@ -62,16 +62,16 @@ kubectl -n release-watch patch secret release-watch-secrets --type merge \
   -p '{"stringData":{"RW_TEAMS_WEBHOOK_URL":"<flow URL>"}}'
 ```
 
-Until the URL is set, the `digest` job fails every day with "RW_TEAMS_WEBHOOK_URL is not set". To preview the cards without sending: `kubectl -n release-watch exec deploy/release-watch-web -- release-watch digest --dry-run` (or locally, `uv run release-watch digest --dry-run`).
+Until the URL is set, the digest and job-failure alerts are kept in the web UI instead, on the Notifications page (http://release-watch.k3s.home.lan/notifications), which also previews the next digest. To print the cards as JSON without sending: `kubectl -n release-watch exec deploy/release-watch-web -- release-watch digest --dry-run` (or locally, `uv run release-watch digest --dry-run`).
 
 ### Daily jobs
 
 | Job | Schedule (America/Sao_Paulo) | What it does |
 |---|---|---|
 | `sync` | 05:00 daily | Mirrors DocExtractor's catalog |
-| `discover` | 05:30 Mondays | Proposes new release-notes candidates for the review queue |
+| `discover` | 05:30 daily | Proposes new release-notes candidates for the review queue; when DocExtractor moves a URL (a version bump), the watch follows it |
 | `watch` | 06:00 daily | Reads every active source, confirms changes about 10 minutes later, gates them, writes events |
-| `digest` | 08:00 daily | Posts the summary card (versions, counts, health) and one card per new or edited entry |
+| `digest` | 08:00 daily | Posts the summary card (versions, counts, health) and one card per new or edited entry (kept on the Notifications page while no webhook is set) |
 
 Every job runs `migrate` first. The first `watch` after a source becomes active only records a baseline. Held-back items wait under **Needs a look** in the web view. Per-source selectors, split rules and newest-child rules live in `seeds/sources.yaml` under `source_config:`; apply them with `release-watch seed seeds/sources.yaml`.
 
