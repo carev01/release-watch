@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -7,7 +8,7 @@ import pytest
 import respx
 from sqlalchemy import select
 
-from release_watch.models import Digest, EntryEvent, JobRun, WatchedSource
+from release_watch.models import CatalogProduct, Digest, Entry, EntryEvent, JobRun, WatchedSource
 from release_watch.notify.digest import preview_digest, run_digest
 from release_watch.notify.teams import Teams, TeamsError
 
@@ -26,7 +27,8 @@ def teams():
 def seed(sf, n_new=2, watch_ok_at=NOW - timedelta(hours=2)):
     with sf() as s:
         src = WatchedSource(vendor_name="Acme", url="https://acme.com/rn", url_key="https://acme.com/rn",
-                            title="Updates", kind="entry_page", state="active", origin="seed")
+                            title="Updates", kind="entry_page", state="active", origin="seed",
+                            created_at=NOW - timedelta(days=1))
         s.add(src)
         s.flush()
         s.add(JobRun(job="watch", started_at=watch_ok_at - timedelta(minutes=10), finished_at=watch_ok_at,
@@ -60,7 +62,7 @@ async def test_digest_sends_summary_then_entries(session_factory):
     counts = await run_digest(session_factory, teams(), web_base_url="http://rw", now=NOW)
     texts = posted_texts(route)
     assert len(texts) == 3
-    assert "Acme released a new version of Box: 2.0" in texts[0] and "Acme: 2 new" in texts[0]
+    assert "**Acme**\n\n- New version **2.0** ([docs page](https://acme.com/v2))" in texts[0] and "Acme: 2 new" in texts[0]
     assert "Entry 0" in texts[1] and "Sum 0" in texts[1] and "Entry 1" in texts[2]
     assert counts == {"cards": 3, "events_sent": 3, "channel": "teams"}
     st = statuses(session_factory)
@@ -166,3 +168,45 @@ async def test_any_post_error_hides_the_url():
         await Teams(HOOK, transport=Boom(), sleep=no_sleep).post({"type": "AdaptiveCard"})
     assert "SECRETSIG" not in str(exc.value) and "logic.azure.com" not in str(exc.value)
     assert exc.value.__cause__ is None and exc.value.__suppress_context__
+
+
+def test_version_and_moved_lines_grouped_by_vendor_and_product(session_factory):
+    sp, rp = uuid.uuid4(), uuid.uuid4()
+    with session_factory() as s:
+        s.add(CatalogProduct(de_id=sp, vendor_de_id=uuid.uuid4(), name="Storage Protect", synced_at=NOW))
+        s.add(CatalogProduct(de_id=rp, vendor_de_id=uuid.uuid4(), name="Resiliency Platform", de_version="10.3",
+                             synced_at=NOW))
+        mail = WatchedSource(vendor_name="IBM", product_de_id=sp, url="https://ibm.com/spfm/8.2.2",
+                             url_key="https://ibm.com/spfm/8.2.2", title="What's new", kind="entry_page",
+                             state="active", origin="seed")
+        db = WatchedSource(vendor_name="IBM", product_de_id=sp, url="https://ibm.com/spfd/8.2.2",
+                           url_key="https://ibm.com/spfd/8.2.2", title="What's new", kind="entry_page",
+                           state="active", origin="heuristic")
+        coh = WatchedSource(vendor_name="Cohesity", product_de_id=rp, url="https://cohesity.com/rp",
+                            url_key="https://cohesity.com/rp", title="RP docs", kind="index_page",
+                            state="active", origin="seed")
+        s.add_all([mail, db, coh])
+        s.flush()
+        s.add(Entry(source_id=mail.id, key="k", heading="what's new", body_hash="h",
+                    body="# What's new for IBM Storage Protect for Mail\n\nText"))
+        for _ in range(2):  # two old pages merged into the same new one
+            s.add(EntryEvent(source_id=mail.id, kind="moved", version="8.2.2", product_de_id=sp, url=mail.url,
+                             heading="Release-notes URL for IBM Storage Protect (What's new) moved to 8.2.2",
+                             status="queued"))
+        s.add(EntryEvent(source_id=db.id, kind="moved", product_de_id=sp, url=db.url, status="queued",
+                         heading="Release-notes URL for IBM Storage Protect (What's new) moved: DocExtractor now uses "
+                                 "the new URL"))
+        s.add(EntryEvent(source_id=coh.id, kind="version", version="10.4", product_de_id=rp, url=coh.url,
+                         heading="Cohesity released a new version of Resiliency Platform: 10.4", status="queued"))
+        s.commit()
+
+    summary = preview_digest(session_factory, web_base_url="http://rw", now=NOW)[-1]
+    texts = [b["text"] for b in summary["body"]]
+    assert "**Cohesity · Resiliency Platform**\n\n- New version **10.4** (DocExtractor tracks 10.3) " \
+           "([docs page](https://cohesity.com/rp))" in texts
+    assert "**IBM · Storage Protect**\n\n" \
+           "- [What's new for IBM Storage Protect for Mail](https://ibm.com/spfm/8.2.2) is the 8.2.2 page " \
+           "(replaces 2 older pages)\n" \
+           "- [What's new](https://ibm.com/spfd/8.2.2): DocExtractor now uses this URL" in texts
+    assert texts.index(next(t for t in texts if t.startswith("**Cohesity"))) < \
+        texts.index(next(t for t in texts if t.startswith("**IBM")))

@@ -8,7 +8,8 @@ NOW = datetime(2026, 11, 4, 8, 0, tzinfo=UTC)
 
 def src(s, url, vendor="V", **kw):
     w = WatchedSource(vendor_name=vendor, url=url, url_key=url, title=url.rsplit("/", 1)[-1], kind="entry_page",
-                      state=kw.pop("state", "active"), origin="seed", **kw)
+                      state=kw.pop("state", "active"), origin="seed",
+                      created_at=kw.pop("created_at", NOW - timedelta(days=7)), **kw)
     s.add(w)
     s.flush()
     return w

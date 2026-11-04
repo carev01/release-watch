@@ -9,10 +9,45 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 
 from release_watch.health import compute_health
-from release_watch.models import CatalogProduct, Digest, EntryEvent, WatchedSource
+from release_watch.models import CatalogProduct, Digest, Entry, EntryEvent, WatchedSource
 from release_watch.notify.cards import entry_cards, envelope, summary_card, text_card
 
 STALE_WATCH = timedelta(hours=26)
+
+
+def _page_title(s, src: WatchedSource | None) -> str | None:
+    """The page's own top heading (e.g. "What's new for IBM Storage Protect for Mail"), else the source title."""
+    if src is None:
+        return None
+    for body in s.scalars(select(Entry.body).where(Entry.source_id == src.id, Entry.removed_at.is_(None))):
+        first = body.lstrip().split("\n", 1)[0]
+        if first.startswith("# "):
+            return first[2:].strip()
+    return src.title
+
+
+def _link(text: str, url: str | None) -> str:
+    return f"[{text}]({url})" if url else text
+
+
+def _group_lines(s, events: list, sources: dict, products: dict) -> list[str]:
+    """One line per version or new page; several old pages that moved to the same page share one line."""
+    lines, by_url = [], {}
+    for ev in events:
+        if ev.kind == "version":
+            product = products.get(ev.product_de_id)
+            tracked = f" (DocExtractor tracks {product.de_version})" if product and product.de_version else ""
+            lines.append(f"New version **{ev.version}**{tracked}" + (f" ([docs page]({ev.url}))" if ev.url else ""))
+        else:
+            by_url.setdefault((ev.url, ev.version), []).append(ev)
+    for (url, version), evs in by_url.items():
+        title = _page_title(s, sources.get(evs[0].source_id)) or evs[0].heading
+        if version:
+            merged = f" (replaces {len(evs)} older pages)" if len(evs) > 1 else ""
+            lines.append(f"{_link(title, url)} is the {version} page{merged}")
+        else:
+            lines.append(f"{_link(title, url)}: DocExtractor now uses this URL")
+    return lines
 
 
 def _plan(s, *, web_base_url: str, now: datetime) -> list[tuple[list, list[dict]]]:
@@ -23,18 +58,19 @@ def _plan(s, *, web_base_url: str, now: datetime) -> list[tuple[list, list[dict]
         WatchedSource.id.in_({e.source_id for e in queued})))}
     products = {p.de_id: p for p in s.scalars(select(CatalogProduct))}
 
-    lines, line_events, entry_events, counts = [], [], [], {}
+    groups: dict[str, list[EntryEvent]] = {}
+    line_events, entry_events, counts = [], [], {}
     for ev in queued:
         src = sources.get(ev.source_id)
         vendor = src.vendor_name if src else "?"
         if ev.kind in ("version", "moved"):
-            product = products.get(ev.product_de_id)
-            tracked = f" (tracked: {product.de_version})" if ev.kind == "version" and product and product.de_version else ""
-            lines.append(f"[{ev.heading}]({ev.url}){tracked}" if ev.url else ev.heading + tracked)
+            product = products.get(ev.product_de_id or (src.product_de_id if src else None))
+            groups.setdefault(f"{vendor} · {product.name}" if product else vendor, []).append(ev)
             line_events.append(ev)
         else:
             counts.setdefault(vendor, {"new": 0, "edited": 0})[ev.kind] += 1
             entry_events.append(ev)
+    lines = [(name, _group_lines(s, groups[name], sources, products)) for name in sorted(groups)]
 
     plan: list[tuple[list, list[dict]]] = []
     if health.last_watch_ok is None or now - health.last_watch_ok > STALE_WATCH:

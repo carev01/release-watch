@@ -82,10 +82,13 @@ def _capped(items: list[str]) -> list[str]:
     return items[:LIST_CAP] + ([f"…and {extra} more"] if extra > 0 else [])
 
 
-def summary_card(health, versions: list[str], counts: dict[str, dict[str, int]], now: datetime) -> dict:
+def summary_card(health, versions: list[tuple[str, list[str]]], counts: dict[str, dict[str, int]],
+                 now: datetime) -> dict:
+    """versions: (vendor · product, its lines) groups of new versions and moved release-notes pages."""
     blocks = [_text(f"**Release Watch · {now:%a %d %b %Y}**", size="Medium")]
     if versions:
-        blocks.append(_text("**New versions and moved release-notes pages**\n\n" + "\n".join(f"- {v}" for v in versions)))
+        blocks.append(_text("**New versions and moved release-notes pages**"))
+        blocks += [_text(f"**{name}**\n\n" + "\n".join(f"- {line}" for line in lines)) for name, lines in versions]
     if counts:
         lines = [f"- {vendor}: " + ", ".join(f"{n} {kind}" for kind, n in c.items() if n)
                  for vendor, c in sorted(counts.items())]
