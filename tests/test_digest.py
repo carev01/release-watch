@@ -210,3 +210,20 @@ def test_version_and_moved_lines_grouped_by_vendor_and_product(session_factory):
            "- [What's new](https://ibm.com/spfd/8.2.2): DocExtractor now uses this URL" in texts
     assert texts.index(next(t for t in texts if t.startswith("**Cohesity"))) < \
         texts.index(next(t for t in texts if t.startswith("**IBM")))
+
+
+def test_generic_page_heading_gets_the_product_the_page_names(session_factory):
+    with session_factory() as s:
+        src = WatchedSource(vendor_name="IBM", url="https://ibm.com/scdm/2.3.2", url_key="https://ibm.com/scdm/2.3.2",
+                            title="What's new", kind="entry_page", state="active", origin="successor")
+        s.add(src)
+        s.flush()
+        s.add(Entry(source_id=src.id, key="k", heading="what's new", body_hash="h",
+                    body="# What's new\n\nLearn about the new features in IBM® Storage Defender Copy Data Management. "
+                         "IBM Storage Defender Copy Data Management 2.3.2 adds IBM Cloud support."))
+        s.add(EntryEvent(source_id=src.id, kind="moved", version="2.3.2", url=src.url, status="queued",
+                         heading="Release-notes URL for IBM Storage Defender (What's new) moved to 2.3.2"))
+        s.commit()
+    summary = preview_digest(session_factory, web_base_url="http://rw", now=NOW)[-1]
+    assert any("- [IBM Storage Defender Copy Data Management: What's new](https://ibm.com/scdm/2.3.2) is the 2.3.2 "
+               "page" in b["text"] for b in summary["body"])

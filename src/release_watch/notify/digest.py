@@ -4,6 +4,8 @@ With no webhook set, the digest is kept for the web UI's Notifications page inst
 """
 
 import json
+import re
+from collections import Counter
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
@@ -15,15 +17,27 @@ from release_watch.notify.cards import entry_cards, envelope, summary_card, text
 STALE_WATCH = timedelta(hours=26)
 
 
+def _named_product(vendor: str, bodies: list[str]) -> str | None:
+    """The product name the page text uses most, e.g. "IBM Storage Defender Copy Data Management"."""
+    found = re.compile(rf"\b{re.escape(vendor)} ((?:(?:[A-Z][\w-]*|for|and|&) )*[A-Z][\w-]*)")
+    names = Counter(m.group(1) for body in bodies for m in found.finditer(body[:2000].replace("®", "")))
+    return f"{vendor} {names.most_common(1)[0][0]}" if names else None
+
+
 def _page_title(s, src: WatchedSource | None) -> str | None:
-    """The page's own top heading (e.g. "What's new for IBM Storage Protect for Mail"), else the source title."""
+    """The page's own top heading (e.g. "What's new for IBM Storage Protect for Mail"), else the source title.
+
+    A heading that doesn't name the vendor ("What's new") gets the product the page text names in front.
+    """
     if src is None:
         return None
-    for body in s.scalars(select(Entry.body).where(Entry.source_id == src.id, Entry.removed_at.is_(None))):
-        first = body.lstrip().split("\n", 1)[0]
-        if first.startswith("# "):
-            return first[2:].strip()
-    return src.title
+    bodies = list(s.scalars(select(Entry.body).where(Entry.source_id == src.id, Entry.removed_at.is_(None))))
+    title = next((b.lstrip().split("\n", 1)[0][2:].strip() for b in bodies if b.lstrip().startswith("# ")),
+                 src.title)
+    if title and src.vendor_name.casefold() not in title.casefold() and (product := _named_product(src.vendor_name,
+                                                                                                   bodies)):
+        return f"{product}: {title}"
+    return title
 
 
 def _link(text: str, url: str | None) -> str:
