@@ -57,7 +57,8 @@ async def test_successor_rejects_thin_or_missing_version(session_factory):
     await propose_successors(session_factory, ScriptedFetcher({NEW: html_page(NEW, "<p>Page not found</p>")}), NOW)
     assert NEW not in sources(session_factory)
     [ev] = events(session_factory)
-    assert (ev.kind, ev.status, ev.reason, ev.url) == ("moved", "needs_look", "successor_unverified", NEW)
+    assert (ev.kind, ev.status, ev.reason, ev.url) == ("moved", "needs_look", "successor_not_found", NEW)
+    assert "Page not found" in ev.body  # the owner sees what the new URL shows
 
 
 async def test_successor_rejects_page_without_new_version(session_factory):
@@ -125,6 +126,9 @@ async def test_successor_rejects_redirect_elsewhere(session_factory):
     moved = FetchResult(NEW, "https://ibm.com/docs/sp/landing", 200, "text/html", text, len(text), "ok", "")
     await propose_successors(session_factory, ScriptedFetcher({NEW: moved}), NOW)
     assert NEW not in sources(session_factory)
+    [ev] = events(session_factory)
+    assert ev.reason == "successor_redirected"
+    assert ev.body.startswith("Redirected to https://ibm.com/docs/sp/landing") and "New feature" in ev.body
 
 
 async def test_successor_rejects_not_found_wording(session_factory):
@@ -134,7 +138,8 @@ async def test_successor_rejects_not_found_wording(session_factory):
     assert NEW not in sources(session_factory)
 
 
-async def test_successor_rejects_size_mismatch_with_old_snapshot(session_factory):
+async def test_successor_accepts_a_much_shorter_page(session_factory):
+    # A new version's what's-new page lists only that version's changes; the old one may be cumulative.
     from release_watch.models import Snapshot
     setup(session_factory)
     with session_factory() as s:
@@ -142,7 +147,7 @@ async def test_successor_rejects_size_mismatch_with_old_snapshot(session_factory
         s.add(Snapshot(source_id=old.id, markdown="x" * 20_000, hash="h"))
         s.commit()
     await propose_successors(session_factory, ScriptedFetcher({NEW: html_page(NEW, GOOD)}), NOW)
-    assert NEW not in sources(session_factory)
+    assert NEW in sources(session_factory)
 
 
 async def test_moved_heading_names_the_product(session_factory):
@@ -160,3 +165,63 @@ async def test_moved_heading_names_the_product(session_factory):
         old = s.scalar(select(WatchedSource).where(WatchedSource.url == OLD))
         assert moved_heading(s, old, "8.2.2") == \
             "Release-notes URL for IBM Storage Protect (Storage Protect 8.2.1 what's new) moved to 8.2.2"
+
+
+async def test_successor_reasons_for_short_page_and_missing_version(session_factory):
+    setup(session_factory)
+    await propose_successors(session_factory, ScriptedFetcher({NEW: html_page(NEW, "<p>8.2.2 stub</p>")}), NOW)
+    assert events(session_factory)[0].reason == "successor_too_short"
+
+
+async def test_successor_reason_when_the_page_fails(session_factory):
+    setup(session_factory)
+    blocked = html_page(NEW, "", status=403, outcome="blocked", reason="forbidden")
+    await propose_successors(session_factory, ScriptedFetcher({NEW: blocked}), NOW)
+    [ev] = events(session_factory)
+    assert ev.reason == "successor_fetch_failed" and "403" in ev.body
+
+
+async def test_owner_chosen_successor_gets_the_moved_line_at_baseline(session_factory):
+    from release_watch.watch.successor import watch_successor
+    setup(session_factory)
+    await propose_successors(session_factory, ScriptedFetcher({NEW: html_page(NEW, "<p>Page not found</p>")}), NOW)
+    other = "https://ibm.com/docs/sp/8.2.2?topic=whats-new-in-sp"
+    with session_factory() as s:
+        [ev] = s.scalars(select(EntryEvent)).all()
+        new = watch_successor(s, ev, other, NOW)
+        s.commit()
+        assert (new.url, new.origin, new.follow["pin"]["version"]) == (other, "successor", "8.2.2")
+    [ev] = events(session_factory)
+    assert ev.status == "dismissed" and ev.dedupe_key is None
+    assert sources(session_factory)[OLD].superseded_by == sources(session_factory)[other].id
+    from release_watch.watch.successor import on_successor_baseline
+    with session_factory() as s:
+        on_successor_baseline(s, s.scalar(select(WatchedSource).where(WatchedSource.url == other)))
+        s.commit()
+    assert [e.status for e in events(session_factory) if e.status == "queued"] == ["queued"]
+
+
+async def test_successor_already_watched_is_linked_not_duplicated(session_factory):
+    setup(session_factory)
+    with session_factory() as s:  # e.g. discovery already follows DocExtractor's new URL
+        s.add(WatchedSource(vendor_name="IBM", url=NEW, url_key=NEW, kind="entry_page", state="candidate",
+                            origin="heuristic"))
+        s.commit()
+    counts = await propose_successors(session_factory, ScriptedFetcher({NEW: html_page(NEW, GOOD)}), NOW)
+    assert counts == {"proposed": 1, "unverified": 0} and events(session_factory) == []
+    src = sources(session_factory)
+    assert src[NEW].state == "active" and src[OLD].superseded_by == src[NEW].id
+
+
+async def test_successor_already_baselined_retires_the_old_page_now(session_factory):
+    setup(session_factory)
+    with session_factory() as s:
+        w = WatchedSource(vendor_name="IBM", url=NEW, url_key=NEW, kind="entry_page", state="active", origin="heuristic")
+        s.add(w)
+        s.flush()
+        s.add(Entry(source_id=w.id, key="k", heading="k", body="b", body_hash="h"))
+        s.commit()
+    await propose_successors(session_factory, ScriptedFetcher({NEW: html_page(NEW, GOOD)}), NOW)
+    assert sources(session_factory)[OLD].state == "superseded"
+    [ev] = events(session_factory)
+    assert (ev.kind, ev.status, ev.version) == ("moved", "queued", "8.2.2")

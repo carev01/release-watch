@@ -1,24 +1,48 @@
 {% extends "base.html" %}
 {% block body %}
 <h1>Needs a look</h1>
-<p class="muted">Events held back by a plausibility gate. "Send" puts them in the next digest; "Dismiss" drops them for good.</p>
+<p class="muted">Changes the watch held back instead of sending, because they looked like they could be wrong.
+Each item says why. "Send" puts it in the next digest; "Dismiss" drops it for good.</p>
 {% if not items %}<p>Nothing waiting.</p>{% else %}
-<form method="post" action="/events/decide">
+<form method="post" action="/events/decide" id="bulk">
 <input type="hidden" name="back" value="/needs-look">
 <div class="bar"><button name="decision" value="send">Send selected</button><button name="decision" value="dismiss">Dismiss selected</button></div>
-<table>
-<tr><th></th><th>Vendor</th><th>Kind</th><th>Heading</th><th>Reason</th><th>Age</th></tr>
-{% for it in items %}
-<tr>
-  <td><input type="checkbox" name="ids" value="{{ it.event.id }}"></td>
-  <td>{{ it.source.vendor_name }}<div class="muted">{{ it.source.title or it.source.url }}</div></td>
-  <td><span class="pill">{{ it.event.kind }}</span></td>
-  <td><a href="/events/{{ it.event.id }}">{{ it.event.heading }}</a>{% if it.event.summary %}<div class="muted">{{ it.event.summary }}</div>{% endif %}</td>
-  <td>{{ it.event.reason or "" }}</td>
-  <td>{{ it.age_days }} d</td>
-</tr>
-{% endfor %}
-</table>
 </form>
+{% for it in items %}{% set ev = it.event %}{% set src = it.source %}
+<section class="item">
+  <div class="bar"><input type="checkbox" name="ids" value="{{ ev.id }}" form="bulk">
+    <strong>{{ src.vendor_name }}</strong> <span class="pill">{{ ev.kind }}</span>
+    <span class="muted">{{ it.age_days }} d old · <a href="/events/{{ ev.id }}">full item</a></span></div>
+  <h3>{{ ev.heading }}</h3>
+  {% if ev.kind == "moved" %}
+  <p>We watch <a href="{{ src.url | web_url }}" rel="noreferrer">{{ src.title or src.url }}</a>{% if it.pin.version %} (version {{ it.pin.version }}){% endif %}.
+  A newer version, <strong>{{ ev.version }}</strong>, has been released, so its release notes are probably at
+  <a href="{{ ev.url | web_url }}" rel="noreferrer">{{ ev.url }}</a>.</p>
+  <p><strong>Why it wasn't switched automatically:</strong> {{ it.why }}</p>
+  {% if ev.body %}<details><summary>What the new URL shows</summary><pre class="verbatim">{{ ev.body }}</pre></details>{% endif %}
+  <form method="post" action="/events/{{ ev.id }}/watch-new" class="bar">
+    <input type="hidden" name="url" value="{{ ev.url }}">
+    <button>Watch the new page</button>
+  </form>
+  <form method="post" action="/events/{{ ev.id }}/watch-new" class="bar">
+    <input type="url" name="url" placeholder="or the right URL for {{ ev.version }}" size="70" required>
+    <button>Watch this URL instead</button>
+  </form>
+  <p class="muted">Either way, the new page is read at the next 06:00 run; the old one stops being watched and the digest gets one line
+  saying the release notes moved. Releases on the new page are sent from then on. "Dismiss" keeps watching only the old page.</p>
+  {% else %}
+  <p><strong>Why it was held:</strong> {{ it.why }}</p>
+  <p class="muted">From <a href="{{ src.url | web_url }}" rel="noreferrer">{{ src.title or src.url }}</a></p>
+  {% if ev.summary %}<p><em>{{ ev.summary }}</em></p>{% endif %}
+  {% if ev.diff %}<details open><summary>What changed</summary><pre class="verbatim">{{ ev.diff }}</pre></details>
+  {% elif ev.body %}<details><summary>The entry as it would be sent</summary><pre class="verbatim">{{ ev.body }}</pre></details>{% endif %}
+  {% endif %}
+  <form method="post" action="/events/decide" class="bar">
+    <input type="hidden" name="ids" value="{{ ev.id }}"><input type="hidden" name="back" value="/needs-look">
+    {% if ev.kind != "moved" %}<button name="decision" value="send">Send</button>{% endif %}
+    <button name="decision" value="dismiss">Dismiss</button>
+  </form>
+</section>
+{% endfor %}
 {% endif %}
 {% endblock %}

@@ -10,14 +10,13 @@ import uuid
 
 from sqlalchemy import func, select
 
-from release_watch.models import CatalogProduct, Entry, EntryEvent, Snapshot, WatchedSource
+from release_watch.models import CatalogProduct, Entry, EntryEvent, WatchedSource
 from release_watch.urls import normalize_url
 from release_watch.watch.extract import extract_markdown
 from release_watch.watch.rules import version_tuple
 
 MIN_TEXT_CHARS = 200
-SIZE_RATIO = (0.3, 3.0)  # a successor's text is within this ratio of the old page's last snapshot
-MIN_SIZE_FOR_RATIO = 500
+PREVIEW_CHARS = 20_000
 NOT_FOUND = re.compile(r"page not found|not found|does not exist|no longer available|\b404\b", re.I)
 
 
@@ -27,22 +26,27 @@ def _fill(template: str, version: str) -> str:
             .replace("{version_major}", major).replace("{version}", version))
 
 
-def _accepts(result, old_url: str, selector: str | None, template: str, version: str,
-             old_size: int | None) -> bool:
+def check_successor(result, old_url: str, selector: str | None, template: str, version: str) -> tuple[str | None, str]:
+    """(None if the page passes, else the reason code; what the page shows, for the owner to judge).
+
+    No size check: a new version's what's-new page lists only its own changes, so it is often much
+    shorter than the cumulative page it replaces.
+    """
     if result.outcome != "ok":  # soft-404 markers and login redirects are already outcomes in the fetcher
-        return False
-    if normalize_url(result.final_url) != normalize_url(result.url):  # redirected to a landing page
-        return False
+        return "successor_fetch_failed", f"The page answered HTTP {result.status} ({result.reason or result.outcome})."
     is_pdf = "pdf" in result.content_type.lower() or result.text.startswith("%PDF")
+    text = "(a PDF)" if is_pdf else extract_markdown(result.text, result.final_url, selector)
+    if normalize_url(result.final_url) != normalize_url(result.url):  # redirected to a landing page
+        return "successor_redirected", f"Redirected to {result.final_url}\n\n{text[:PREVIEW_CHARS]}"
     if is_pdf:
-        return old_url.lower().endswith(".pdf")
-    text = extract_markdown(result.text, result.final_url, selector)
+        return (None if old_url.lower().endswith(".pdf") else "successor_no_version"), text
+    preview = text[:PREVIEW_CHARS]
     if NOT_FOUND.search(text[:1000]):
-        return False
-    if old_size and old_size >= MIN_SIZE_FOR_RATIO and not SIZE_RATIO[0] * old_size <= len(text) <= SIZE_RATIO[1] * old_size:
-        return False
+        return "successor_not_found", preview
+    if len(text) < MIN_TEXT_CHARS:
+        return "successor_too_short", preview
     needle = version.split(".")[0] if "{version}" not in template and "{version_compact}" not in template else version
-    return len(text) >= MIN_TEXT_CHARS and needle in text
+    return (None if needle in text else "successor_no_version"), preview
 
 
 def moved_heading(s, old: WatchedSource, version: str) -> str:
@@ -53,9 +57,9 @@ def moved_heading(s, old: WatchedSource, version: str) -> str:
     return f"Release-notes URL for {name} moved to {version}"
 
 
-def on_successor_baseline(s, new: WatchedSource) -> None:
+def on_successor_baseline(s, new: WatchedSource, version: str | None = None) -> None:
     """The successor is being watched now: retire the pinned source and send the one-line notice."""
-    version = ((new.follow or {}).get("pin") or {}).get("version")
+    version = version or ((new.follow or {}).get("pin") or {}).get("version")
     for old in s.scalars(select(WatchedSource).where(WatchedSource.superseded_by == new.id,
                                                      WatchedSource.state == "active")):
         old.state = "superseded"
@@ -64,6 +68,40 @@ def on_successor_baseline(s, new: WatchedSource) -> None:
             s.add(EntryEvent(source_id=new.id, kind="moved", version=version, product_de_id=old.product_de_id,
                              heading=moved_heading(s, old, version), url=new.url, dedupe_key=dedupe,
                              status="queued"))
+
+
+def _add_successor(s, old: WatchedSource, url: str, version: str, now) -> WatchedSource:
+    pin = old.follow["pin"]
+    new = WatchedSource(
+        id=uuid.uuid4(), vendor_name=old.vendor_name, product_de_id=old.product_de_id, url=url,
+        url_key=normalize_url(url), kind=old.kind, state="active", origin="successor",
+        title=(old.title or "").replace(pin["version"], version) or None, selector=old.selector,
+        split_rule=old.split_rule, follow={**old.follow, "pin": {**pin, "version": version}},
+        notes=f"Successor of {old.url}", confirmed_by="successor", decided_at=now,
+        label=old.label, label_reason="successor")
+    s.add(new)
+    s.flush()
+    # The moved line is sent once the successor has a baseline (run.py), not on the probe alone.
+    old.superseded_by = new.id
+    return new
+
+
+def watch_successor(s, event: EntryEvent, url: str, now) -> WatchedSource:
+    """The owner picked the new page for an unverified "may have moved" item: watch it from now on.
+
+    The held item steps aside (its dedupe key freed) so the successor's baseline sends the moved line.
+    """
+    old = s.get(WatchedSource, event.source_id)
+    key = normalize_url(url)
+    new = s.scalar(select(WatchedSource).where(WatchedSource.url_key == key))
+    if new is None:
+        new = _add_successor(s, old, url, event.version, now)
+    else:
+        new.state = "active"
+        old.superseded_by = new.id
+    event.status, event.decided_at, event.dedupe_key = "dismissed", now, None
+    s.flush()
+    return new
 
 
 async def propose_successors(session_factory, fetcher, now) -> dict[str, int]:
@@ -95,26 +133,22 @@ async def propose_successors(session_factory, fetcher, now) -> dict[str, int]:
             old = s.get(WatchedSource, old_id)
             pin = old.follow["pin"]
             result = await fetcher.fetch(url)
-            old_size = s.scalar(select(func.length(Snapshot.markdown)).where(Snapshot.source_id == old.id)
-                                .order_by(Snapshot.fetched_at.desc()).limit(1))
-            if _accepts(result, old.url, old.selector, pin["successor"], version, old_size) and not s.scalar(
-                    select(func.count()).select_from(WatchedSource).where(WatchedSource.url_key == normalize_url(url))):
-                new = WatchedSource(
-                    id=uuid.uuid4(), vendor_name=old.vendor_name, product_de_id=old.product_de_id, url=url,
-                    url_key=normalize_url(url), kind=old.kind, state="active", origin="successor",
-                    title=(old.title or "").replace(pin["version"], version) or None, selector=old.selector,
-                    split_rule=old.split_rule, follow={**old.follow, "pin": {**pin, "version": version}},
-                    notes=f"Successor of {old.url}", confirmed_by="successor", decided_at=now,
-                    label=old.label, label_reason="successor")
-                s.add(new)
+            why, shown = check_successor(result, old.url, old.selector, pin["successor"], version)
+            taken = s.scalar(select(WatchedSource).where(WatchedSource.url_key == normalize_url(url)))
+            if why is None and taken is not None and taken.state in ("active", "candidate"):
+                taken.state, old.superseded_by = "active", taken.id  # already known, e.g. via DocExtractor
                 s.flush()
-                # The moved line is sent once the successor has a baseline (run.py), not on the probe alone.
-                old.superseded_by = new.id
+                if s.scalar(select(func.count()).select_from(Entry).where(Entry.source_id == taken.id)):
+                    on_successor_baseline(s, taken, version)  # it has its baseline already
+                counts["proposed"] += 1
+            elif why is None and taken is None:
+                _add_successor(s, old, url, version, now)
                 counts["proposed"] += 1
             else:
                 s.add(EntryEvent(source_id=old.id, kind="moved", version=version, product_de_id=old.product_de_id,
                                  heading=moved_heading(s, old, version).replace(" moved to ", " may have moved to "),
-                                 url=url, dedupe_key=dedupe, status="needs_look", reason="successor_unverified"))
+                                 body=shown or None, url=url, dedupe_key=dedupe, status="needs_look",
+                                 reason=why or "successor_url_taken"))
                 counts["unverified"] += 1
             s.commit()
     return counts

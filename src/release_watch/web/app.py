@@ -13,10 +13,32 @@ from sqlalchemy import func, select, text
 
 from release_watch.models import LABEL, SOURCE_STATE, CatalogProduct, Digest, EntryEvent, NewsSource, WatchedSource
 from release_watch.notify.digest import preview_digest
+from release_watch.watch.successor import watch_successor
 from release_watch.web.cards import card_html
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 templates.env.filters["card_html"] = card_html
+templates.env.filters["web_url"] = lambda u: u if isinstance(u, str) and u.startswith(("http://", "https://")) else None
+
+# Why an item is in "needs a look", in words. {version} is the event's version.
+REASON_TEXT = {
+    "too_many_new": "More than 3 new entries appeared on this page in one day. That usually means the page was "
+                    "reorganised rather than that several releases shipped, so nothing was sent.",
+    "edit_too_large": "More than half of this entry changed at once. That is often a page redesign rather than a "
+                      "real update, so it was held. The diff shows exactly what changed.",
+    "child_fetch_failed": "A new release page was listed, but it could not be read, so there is no text to send.",
+    "no_version": "A new item appeared on a version list, but no version number could be read from it.",
+    "successor_redirected": "The expected new URL redirects to another page, so it may not be the {version} "
+                            "release notes.",
+    "successor_not_found": "The expected new URL shows \"not found\" wording.",
+    "successor_too_short": "The expected new URL has almost no text.",
+    "successor_no_version": "The expected new URL doesn't mention {version}.",
+    "successor_fetch_failed": "The expected new URL could not be read.",
+    "successor_url_taken": "The expected new URL is already in the source list in a state that blocks it "
+                           "(for example rejected).",
+    "successor_unverified": "The expected new URL failed one of the checks (it redirected, or its text looked "
+                            "too different from the old page).",
+}
 
 NEW_STATE = {"confirm": "active", "reject": "rejected", "reset": "candidate"}
 EVENT_DECISION = {"send": "queued", "dismiss": "dismissed"}
@@ -95,8 +117,24 @@ def create_app(session_factory, web_base_url: str = "") -> FastAPI:
             rows = s.execute(select(EntryEvent, WatchedSource).join(WatchedSource, WatchedSource.id == EntryEvent.source_id)
                              .where(EntryEvent.status == "needs_look").order_by(EntryEvent.created_at)).all()
         now = datetime.now(UTC)
-        items = [{"event": ev, "source": src, "age_days": (now - ev.created_at).days} for ev, src in rows]
+        items = [{"event": ev, "source": src, "age_days": (now - ev.created_at).days,
+                  "pin": ((src.follow or {}).get("pin") or {}),
+                  "why": REASON_TEXT.get(ev.reason or "", ev.reason or "").format(version=ev.version or "")}
+                 for ev, src in rows]
         return templates.TemplateResponse(request, "needs_look.html", {"items": items})
+
+    @app.post("/events/{event_id}/watch-new")
+    def watch_new(event_id: uuid.UUID, url: Annotated[str, Form()]):
+        url = url.strip()
+        if not url.startswith(("http://", "https://")):
+            raise HTTPException(400, "the new page needs an http(s) URL")
+        with session_factory() as s:
+            ev = s.get(EntryEvent, event_id)
+            if ev is None or ev.kind != "moved" or ev.status != "needs_look":
+                raise HTTPException(404, "no such moved item waiting")
+            watch_successor(s, ev, url, datetime.now(UTC))
+            s.commit()
+        return RedirectResponse("/needs-look", status_code=303)
 
     @app.post("/events/decide")
     def decide_events(ids: Annotated[list[uuid.UUID], Form()],

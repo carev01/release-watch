@@ -100,7 +100,7 @@ def add_event(session_factory, heading, status="needs_look", body="body", kind="
     with session_factory() as s:
         src = s.scalars(select(WatchedSource)).first()
         ev = EntryEvent(source_id=src.id, kind=kind, heading=heading, body=body, status=status,
-                        reason=kw.pop("reason", "too_many_new"), url=src.url, **kw)
+                        reason=kw.pop("reason", "too_many_new"), url=kw.pop("url_override", src.url), **kw)
         s.add(ev)
         s.commit()
         return str(ev.id)
@@ -117,7 +117,8 @@ def test_needs_look_lists_events(client, session_factory):
     add_event(session_factory, "October 28, 2026", summary="Adds X.")
     add_event(session_factory, "Already sent", status="sent")
     page = client.get("/needs-look").text
-    assert "October 28, 2026" in page and "too_many_new" in page and "Adds X." in page
+    assert "October 28, 2026" in page and "Adds X." in page
+    assert "More than 3 new entries appeared on this page in one day" in page
     assert "Already sent" not in page
     assert "Needs a look (1)" in client.get("/").text
 
@@ -179,3 +180,48 @@ def test_notifications_shows_next_digest_and_past_ones(client, session_factory):
     assert '<a href="https://acme.com/rn"' in page and 'href="javascript' not in page
     assert "Open page" in page
     assert '<a href="/notifications">' in client.get("/").text
+
+
+def add_moved(session_factory, reason="successor_redirected", body="Redirected to https://ibm.com/landing\n\nPreview words"):
+    from release_watch.models import EntryEvent
+
+    with session_factory() as s:
+        src = s.scalars(select(WatchedSource).where(WatchedSource.state == "active")).first()
+        src.follow = {"pin": {"version": "8.2.1", "signal": "https://ibm.com/sig", "successor": "https://ibm.com/{version}"}}
+        ev = EntryEvent(source_id=src.id, kind="moved", heading="Release-notes URL for X may have moved to 8.2.2",
+                        body=body, url="https://ibm.com/8.2.2", version="8.2.2", status="needs_look",
+                        reason=reason, dedupe_key=f"moved:{src.id}:8.2.2")
+        s.add(ev)
+        s.commit()
+        return str(ev.id), src.url
+
+
+def test_needs_look_moved_item_explains_and_previews(client, session_factory):
+    eid, old_url = add_moved(session_factory)
+    page = client.get("/needs-look").text
+    assert old_url in page and "https://ibm.com/8.2.2" in page and "8.2.1" in page
+    assert "redirects to another page" in page and "Preview words" in page
+    assert f'action="/events/{eid}/watch-new"' in page and "Watch the new page" in page
+
+
+def test_watch_new_page_creates_the_successor(client, session_factory):
+    eid, old_url = add_moved(session_factory)
+    resp = client.post(f"/events/{eid}/watch-new", data={"url": "https://ibm.com/docs/8.2.2/whats-new"},
+                       follow_redirects=False)
+    assert resp.status_code == 303 and resp.headers["location"] == "/needs-look"
+    with session_factory() as s:
+        new = s.scalars(select(WatchedSource).where(WatchedSource.url == "https://ibm.com/docs/8.2.2/whats-new")).one()
+        old = s.scalars(select(WatchedSource).where(WatchedSource.url == old_url)).one()
+        assert (new.state, new.origin, old.superseded_by) == ("active", "successor", new.id)
+    assert event_status(session_factory, eid) == "dismissed"
+
+
+def test_watch_new_page_needs_a_web_url(client, session_factory):
+    eid, _ = add_moved(session_factory)
+    assert client.post(f"/events/{eid}/watch-new", data={"url": "javascript:alert(1)"}).status_code == 400
+    assert event_status(session_factory, eid) == "needs_look"
+
+
+def test_event_page_never_links_javascript(client, session_factory):
+    eid = add_event(session_factory, "A", url_override="javascript:alert(1)")
+    assert 'href="javascript' not in client.get(f"/events/{eid}").text

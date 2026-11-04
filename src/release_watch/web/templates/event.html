@@ -2,7 +2,7 @@
 {% block body %}
 <h1>{{ ev.heading }}</h1>
 <p class="muted">{{ source.vendor_name if source else "" }}{% if product %} · {{ product.name }}{% endif %} · {{ ev.kind }} · {{ ev.status }}{% if ev.reason %} ({{ ev.reason }}){% endif %} · {{ ev.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</p>
-{% if ev.url %}<p class="url"><a href="{{ ev.url }}" rel="noreferrer">{{ ev.url }}</a></p>{% endif %}
+{% if ev.url %}<p class="url">{% if ev.url | web_url %}<a href="{{ ev.url }}" rel="noreferrer">{{ ev.url }}</a>{% else %}{{ ev.url }}{% endif %}</p>{% endif %}
 {% if ev.summary %}<p><em>{{ ev.summary }}</em></p>{% endif %}
 {% if ev.status == "needs_look" %}
 <form method="post" action="/events/decide" class="bar">
