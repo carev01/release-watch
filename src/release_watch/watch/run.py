@@ -287,9 +287,16 @@ async def _build_events(sf, fetcher, src, mode: str, changes: Changes) -> list[E
     if mode == "entry":  # one page per rolling release: the child is the entry, sent verbatim
         events = []
         for entry, status, reason in new:
-            child = await fetcher.fetch(entry.url)
-            body = extract_markdown(child.text, entry.url, (src.follow or {}).get("child_selector")) \
-                if child.outcome == "ok" else ""
+            bodies = []
+            for page_url in (entry.url, *entry.parts):
+                child = await fetcher.fetch(page_url)
+                text = extract_markdown(child.text, page_url, (src.follow or {}).get("child_selector")) \
+                    if child.outcome == "ok" else ""
+                if not text:
+                    bodies = []
+                    break
+                bodies.append(text)
+            body = "\n\n".join(bodies)
             if not body:
                 status, reason = "needs_look", "child_fetch_failed"
             events.append(EntryEvent(id=uuid.uuid4(), source_id=src.id, kind="new", heading=entry.heading,

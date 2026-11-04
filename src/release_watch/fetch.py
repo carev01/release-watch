@@ -37,10 +37,17 @@ class HostPolicy:
     max_concurrency: int = 2
     min_delay_ms: int = 1000
     soft_404_markers: tuple[str, ...] = ()
+    browser: bool = False  # read through Browserless (a real Chrome), as DocExtractor does for this host
+    warmup_url: str | None = None  # visited first in the same browser session, so a WAF sets its cookies
 
 
-# Matched by host suffix.
+# Matched by host suffix, first match wins.
 DEFAULT_HOST_POLICIES: dict[str, HostPolicy] = {
+    # Akamai answers 403 to any plain client; a browser that visits the site root first gets through.
+    "docs.redhat.com": HostPolicy(browser=True, warmup_url="https://docs.redhat.com/en", max_concurrency=1,
+                                  min_delay_ms=3000),
+    # Dell's KB pages answer 403 to the cluster's plain HTTP client; dl.dell.com PDFs are fine over HTTP.
+    "www.dell.com": HostPolicy(browser=True, max_concurrency=1, min_delay_ms=3000),
     "ibm.com": HostPolicy(user_agent="curl/8.5.0"),
     "cohesity.com": HostPolicy(soft_404_markers=("ERROR_FALLBACK;404",)),
     # Dell's KB pages answer 403 to parallel fetches.
@@ -58,6 +65,7 @@ class FetchResult:
     bytes: int
     outcome: Outcome
     reason: str
+    content: bytes = b""  # the raw body, kept only for PDFs (text would garble it)
 
 
 def policy_for(host: str, policies: dict[str, HostPolicy], default: HostPolicy | None = None) -> HostPolicy:
@@ -88,6 +96,29 @@ def classify_response(status: int | None, url: str, final_url: str, body: str,
     return "ok", ""
 
 
+# Browserless /function: render like a desktop Chrome and return the page's HTML and main-document status.
+# A huge page may never go network-idle; its HTML is there anyway, so a navigation timeout is tolerated.
+BROWSER_FUNCTION = r"""
+export default async function ({ page, context }) {
+  await page.setUserAgent(context.userAgent);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
+  let doc = null;
+  page.on('response', r => { if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) doc = r; });
+  if (context.warmupUrl) {
+    try { await page.goto(context.warmupUrl, { waitUntil: 'networkidle2', timeout: 60000 }); } catch (e) {}
+    await new Promise(r => setTimeout(r, 4000));
+  }
+  try { await page.goto(context.url, { waitUntil: 'networkidle2', timeout: 60000 }); } catch (e) {}
+  await new Promise(r => setTimeout(r, 2000));
+  const html = await page.evaluate(() => document.documentElement.outerHTML);
+  return { data: { html, finalUrl: page.url(), status: doc ? doc.status() : null,
+                   contentType: doc ? (doc.headers()['content-type'] || '') : '' }, type: 'application/json' };
+}
+"""
+BROWSER_CONCURRENCY = 2  # Browserless is shared with DocExtractor
+BROWSER_TIMEOUT = 150.0
+
+
 class Fetcher:
     def __init__(self, settings: Settings, policies: dict[str, HostPolicy] = DEFAULT_HOST_POLICIES,
                  transport: httpx.AsyncBaseTransport | None = None, default_policy: HostPolicy | None = None):
@@ -100,6 +131,8 @@ class Fetcher:
         self._semaphores: dict[str, asyncio.Semaphore] = {}
         self._host_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._last_start: dict[str, float] = {}
+        self._browser = asyncio.Semaphore(BROWSER_CONCURRENCY)
+        self._browser_retry_delay = 10.0
 
     async def __aenter__(self) -> "Fetcher":
         return self
@@ -123,6 +156,10 @@ class Fetcher:
         if policy.user_agent is None:
             # Some WAFs (Red Hat docs, Cohesity and Commvault IR) 403 a browser UA without the rest of the headers.
             headers.update(BROWSER_HEADERS)
+        if policy.browser and self._settings.browserless_token.get_secret_value():
+            async with sem, self._browser:
+                await self._pace(host, policy)
+                return await self._fetch_in_browser(url, policy)
         async with sem:
             for attempt in range(ATTEMPTS):
                 await self._pace(host, policy)
@@ -141,9 +178,46 @@ class Fetcher:
                                        "", len(resp.content), "error", "too_large")
                 body = resp.text
                 outcome, reason = classify_response(resp.status_code, url, str(resp.url), body, policy)
-                return FetchResult(url, str(resp.url), resp.status_code, resp.headers.get("content-type", ""),
-                                   body, len(resp.content), outcome, reason)
+                ctype = resp.headers.get("content-type", "")
+                raw = resp.content if "pdf" in ctype.lower() or resp.content.startswith(b"%PDF") else b""
+                return FetchResult(url, str(resp.url), resp.status_code, ctype, body, len(resp.content),
+                                   outcome, reason, raw)
         raise AssertionError("unreachable")
+
+
+    async def _fetch_in_browser(self, url: str, policy: HostPolicy) -> FetchResult:
+        payload = {"code": BROWSER_FUNCTION, "context": {
+            "url": url, "warmupUrl": policy.warmup_url, "userAgent": self._settings.browser_user_agent}}
+        # The token goes in a header, never the URL, so it can't reach a log line.
+        headers = {"Authorization": f"Bearer {self._settings.browserless_token.get_secret_value()}"}
+        endpoint = self._settings.browserless_url.rstrip("/") + "/function"
+        reason = ""
+        for attempt in range(2):
+            try:
+                resp = await self._client.post(endpoint, json=payload, headers=headers,
+                                               timeout=httpx.Timeout(BROWSER_TIMEOUT, connect=10.0))
+                if resp.status_code == 200:
+                    break
+                reason = f"browserless_http_{resp.status_code}"
+            except httpx.TransportError as exc:
+                reason = f"browserless_{type(exc).__name__}"
+            if attempt == 0:
+                await asyncio.sleep(self._browser_retry_delay)
+        else:
+            return FetchResult(url, url, None, "", "", 0, "error", reason)
+        try:
+            body = resp.json()
+            data = body.get("data", body)
+            html, final_url = str(data["html"]), str(data.get("finalUrl") or url)
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return FetchResult(url, url, None, "", "", 0, "error", "browserless_bad_payload")
+        status = data.get("status")
+        size = len(html.encode())
+        if size > MAX_BODY_BYTES:
+            return FetchResult(url, final_url, status, "", "", size, "error", "too_large")
+        outcome, why = classify_response(status, url, final_url, html, policy)
+        return FetchResult(url, final_url, status, str(data.get("contentType") or "text/html"), html, size,
+                           outcome, why)
 
 
 def _retry_after(resp: httpx.Response, attempt: int) -> float:

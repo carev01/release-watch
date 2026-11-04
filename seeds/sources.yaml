@@ -1013,15 +1013,15 @@ source_config:
 # 20 children, newest "SIRIS 5 and ALTO 4 Firmware Release Notes"
 - url: "https://continuity.datto.com/help/Content/kb/UnifiedBackup/releaseNotes-Landing.htm"
   follow: {"pick": {"type": "links", "selector": "#mc-main-content table", "href_regex": "continuity\\.datto\\.com/help/Content/kb/"}}
-# 1 entries, newest "Current release"; workaround: release dates are MadCap dropdown hotspots, not headings, so only the 'Current release' section is one entry
+# release dates are MadCap dropdown hotspots, not headings: split on those date lines (2026-11-04)
 - url: "https://help.spanning.kaseya.com/help/Content/K-Span-365/release-notes.htm"
-  split_rule: {"heading_regex": "^current release$"}
-# 1 entries, newest "Current release"; workaround: release dates are MadCap dropdown hotspots, not headings, so only the 'Current release' section is one entry
+  split_rule: {"line_regex": "^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?( \\d{1,2},?)? \\d{4}$"}
+# release dates are MadCap dropdown hotspots, not headings: split on those date lines (2026-11-04)
 - url: "https://help.spanning.kaseya.com/help/Content/K-Span-Google-Workspace/GW-release-notes.htm"
-  split_rule: {"heading_regex": "^current release$"}
-# 1 entries, newest "Current release"; workaround: release dates are MadCap dropdown hotspots, not headings, so only the 'Current release' section is one entry
+  split_rule: {"line_regex": "^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?( \\d{1,2},?)? \\d{4}$"}
+# release dates are MadCap dropdown hotspots, not headings: split on those date lines (2026-11-04)
 - url: "https://help.spanning.kaseya.com/help/Content/K-Span-SF/SF-release-notes.htm"
-  split_rule: {"heading_regex": "^current release$"}
+  split_rule: {"line_regex": "^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?( \\d{1,2},?)? \\d{4}$"}
 # 45 children, newest "11.2.0-3 – October 28, 2026"; mode entry (one child page per release)
 - url: "https://help.unitrends.kaseya.com/help/Content/Satori/release-notes.htm"
   kind: "index_page"
@@ -1300,3 +1300,26 @@ source_config:
   follow: {"pick": {"type": "versions", "regex": "(\\d+(?:\\.\\d+)+)\\s*\\(Latest\\)"}}
 - url: "https://docs.cohesity.com/docs/resiliencyplatform"
   follow: {"pick": {"type": "versions", "regex": "(\\d+(?:\\.\\d+)+)\\s*\\(Latest\\)"}}
+# Arcserve MadCap help: the default.htm pages are frame shells; releases come from the help system's TOC data (2026-11-04)
+- url: "https://documentation.arcserve.com/Arcserve-ImageManager/Available/ENU/IM_RN/default.htm"
+  kind: "index_page"
+  follow: {"mode": "entry", "pick": {"type": "madcap", "title_regex": "\\d+\\.\\d+.*\\(", "include_children": true}}
+- url: "https://documentation.arcserve.com/Arcserve-ShadowProtect/Available/ENU/SPX_RN/default.htm"
+  kind: "index_page"
+  follow: {"mode": "entry", "pick": {"type": "madcap", "title_regex": "\\d+\\.\\d+.*\\(", "include_children": true}}
+- url: "https://documentation.arcserve.com/Arcserve-ShadowControl/Available/ENU/SCRN/default.htm"
+  kind: "index_page"
+  follow: {"mode": "entry", "pick": {"type": "madcap", "title_regex": "\\d+\\.\\d+.*\\(", "include_children": true}}
+- url: "https://documentation.arcserve.com/Arcserve-Recovery-Environment/Available/ENU/RE_RN/default.htm"
+  kind: "index_page"
+  follow: {"mode": "entry", "pick": {"type": "madcap", "title_regex": "\\d+\\.\\d+.*\\(", "include_children": true}}
+# PDFs are read as text now: one entry per document, so a change arrives as an edit with a diff (2026-11-04)
+- url: "https://dl.dell.com/content/manual25326234-dell-avamar-19-12-release-notes.pdf?language=en-us"
+  kind: "entry_page"
+- url: "https://docs.azure.hycu.com/HYCU-for-Azure-Release-Notes.pdf"
+  kind: "entry_page"
+- url: "https://docs.cohesity.com/7_5/Web/PDFs/75_ReleaseNotes.pdf"
+  kind: "entry_page"
+# Datto: release dates are MadCap dropdown lines, not headings (2026-11-04)
+- url: "https://saasprotection.datto.com/help/M365/Content/Additional_resources/Release_notes.html"
+  split_rule: {"line_regex": "^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?( \\d{1,2},?)? \\d{4}$"}

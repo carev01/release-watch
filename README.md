@@ -48,6 +48,15 @@ helm upgrade --install release-watch deploy/helm/release-watch \
 
 Add `release-watch.k3s.home.lan` to DNS, pointing at the Traefik ingress.
 
+Red Hat docs and Dell's KB pages refuse plain HTTP clients, so they are read through the shared in-cluster
+Browserless, as DocExtractor does. Copy its token into the Secret without printing it:
+
+```bash
+kubectl -n release-watch patch secret release-watch-secrets --type merge -p "{\"stringData\":{\"RW_BROWSERLESS_TOKEN\":\"$(kubectl -n browserless get secret browserless-token -o jsonpath='{.data.token}' | base64 -d)\"}}"
+```
+
+Without it, those pages are fetched over plain HTTP and show as suspect in the health block.
+
 ### Teams notifications (Power Automate)
 
 The daily digest (08:00) and the immediate alerts are posted to a Teams group chat through a Power Automate webhook.

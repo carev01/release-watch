@@ -26,6 +26,7 @@ class Entry:
     body: str
     url: str | None = None
     published_at: datetime | None = None
+    parts: tuple[str, ...] = ()  # an index child's sub-pages, read with it in entry mode
 
 
 def entry_key(heading: str) -> str:
@@ -38,6 +39,10 @@ _PRIVATE_USE = re.compile("[\ue000-\uf8ff\u200b]")
 _EMPHASIS = re.compile(r"(\*\*|__)(.+?)\1")
 
 
+# Copy-link button text rendered into headings (Red Hat docs: "Copy linkLink copied to clipboard!").
+_COPY_LINK = re.compile(r"\s*copy link\s*(link copied to clipboard!?)?\s*$", re.I)
+
+
 def _clean_heading(text: str) -> str:
     """Heading text without link or image markup (anchor links, copy-link icons)."""
     text = _IMAGE_MD.sub("", text)
@@ -45,6 +50,7 @@ def _clean_heading(text: str) -> str:
         text = _LINK_MD.sub(r"\1", text)
     text = _PRIVATE_USE.sub("", text)  # icon-font glyphs (Sphinx permalink \uf0c1)
     text = _EMPHASIS.sub(r"\2", text)
+    text = _COPY_LINK.sub("", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -76,7 +82,12 @@ def split_entries(markdown: str, rule: dict | None = None) -> list[Entry]:
 
     lines = markdown.splitlines()
     heads = _headings(lines)
-    if "heading_regex" in rule:
+    if "line_regex" in rule:  # dates on plain lines, e.g. MadCap dropdown hotspots: each runs to the next one
+        pattern = re.compile(rule["line_regex"], re.I)
+        starts = [(i, 0, text) for i, line in enumerate(lines)
+                  if (text := _clean_heading(line.lstrip("#").strip())) and pattern.search(text)]
+        heads = starts
+    elif "heading_regex" in rule:
         pattern = re.compile(rule["heading_regex"], re.I)
         starts = [h for h in heads if pattern.search(h[2])]
     else:

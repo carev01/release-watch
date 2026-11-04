@@ -319,3 +319,25 @@ async def test_version_page_baseline_quiet_when_docextractor_is_current(session_
     text = json.dumps({"v": ["10.4", "10.3"]})
     await run(session_factory, ScriptedFetcher({URL: FetchResult(URL, URL, 200, "application/json", text, len(text), "ok", "")}))
     assert events(session_factory) == []
+
+
+async def test_entry_mode_sends_the_child_with_its_sub_pages(session_factory):
+    from tests.test_rules import MC, _raw, madcap_site
+    follow = {"mode": "entry", "pick": {"type": "madcap", "title_regex": r"SPX \d", "include_children": True}}
+    with session_factory() as s:
+        s.add(WatchedSource(vendor_name="Arcserve", url=MC + "default.htm", url_key=MC + "default.htm",
+                            kind="index_page", state="active", origin="seed", follow=follow))
+        s.commit()
+    site = madcap_site()
+    old_chunk = site.script[MC + "Data/Tocs/RN_Chunk0.js"][0]
+    first = old_chunk.text.replace("'/Content/RN/SPX-8.0.0.htm':{i:[2]", "'/Content/RN/OTHER.htm':{i:[99]")
+    site.script[MC + "Data/Tocs/RN_Chunk0.js"] = [_raw(old_chunk.url, first), old_chunk]
+    await run(session_factory, site)  # baseline: only 7.5.18 is a version page
+    for path, text in (("Content/RN/SPX-8.0.0.htm", "<h1>SPX 8.0.0</h1><p>Intro.</p>"),
+                       ("Content/RN/Enhancements-8.0.0.htm", "<h1>Enhancements</h1><p>Faster.</p>"),
+                       ("Content/RN/Fixed%20Issues-8.0.0.htm", "<h1>Fixed</h1><p>Bug 12.</p>")):
+        site.script[MC + path] = [html_page(MC + path, text)]
+    await run(session_factory, site)
+    [ev] = events(session_factory)
+    assert ev.heading == "ShadowProtect SPX 8.0.0 (June, 2026)"
+    assert ev.body.index("Intro.") < ev.body.index("Faster.") < ev.body.index("Bug 12.")

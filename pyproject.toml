@@ -21,6 +21,7 @@ dependencies = [
     "typer>=0.15",
     "markdownify>=0.14",
     "markdown-it-py>=3.0",
+    "pypdf>=5.0",
 ]
 
 [project.scripts]

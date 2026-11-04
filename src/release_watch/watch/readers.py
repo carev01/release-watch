@@ -1,11 +1,13 @@
 """Read one watched source into entries, whatever its kind."""
 
+import io
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal
 
 import feedparser
+from pypdf import PdfReader
 
 from release_watch.models import WatchedSource
 from release_watch.urls import normalize_url
@@ -72,6 +74,15 @@ def is_prerelease(text: str) -> bool:
     return bool(PRE_RELEASE.search(text))
 
 
+def pdf_text(content: bytes) -> str:
+    try:
+        reader = PdfReader(io.BytesIO(content))
+        pages = [(page.extract_text() or "").strip() for page in reader.pages]
+    except Exception:  # pypdf raises many kinds of errors on damaged or encrypted files
+        return ""
+    return "\n\n".join(p for p in pages if p)
+
+
 async def read_source(source: WatchedSource, fetcher) -> ReadResult:
     result = await _read(source, fetcher)
     result.entries = unique_keys([e for e in result.entries if not is_prerelease(e.heading)])
@@ -88,8 +99,8 @@ async def _read(source: WatchedSource, fetcher) -> ReadResult:
             entries = [Entry(key=k.title, heading=k.title, body=k.title) for k in kids]
         else:
             # The body must differ per child: compare() treats a known body under a new key as a rename.
-            entries = [Entry(key=normalize_url(k.url), heading=k.title, body=f"[{k.title}]({k.url})", url=k.url)
-                       for k in kids]
+            entries = [Entry(key=normalize_url(k.url), heading=k.title, body=f"[{k.title}]({k.url})", url=k.url,
+                             parts=k.parts) for k in kids]
         return ReadResult("ok", "", entries, result.bytes, "", result.final_url, result.status)
 
     result = await fetcher.fetch(source.url)
@@ -97,7 +108,12 @@ async def _read(source: WatchedSource, fetcher) -> ReadResult:
         return failed
     done = dict(size=result.bytes, final_url=result.final_url, http_status=result.status)
     if "pdf" in result.content_type.lower() or result.text.startswith("%PDF"):
-        return ReadResult("suspect", "pdf_unparsed", **done)
+        text = pdf_text(result.content)
+        if not text:
+            return ReadResult("suspect", "pdf_unparsed", **done)
+        # A PDF has no markup to split on: the document is one entry, so a change arrives as an edit with a diff.
+        heading = source.title or source.url
+        return ReadResult("ok", "", [Entry(key="pdf", heading=heading, body=text)], markdown=text, **done)
     if source.kind == "feed":
         return ReadResult("ok", "", _feed_entries(result.text), markdown="", **done)
     rule = source.split_rule or {}

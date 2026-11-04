@@ -71,3 +71,27 @@ def test_heading_text_drops_icon_glyphs_and_bold():
     text = "## **5.4.1**\n\nA\n\n## Bacula Enterprise 18.2.5\n\nB"
     entries = split_entries(text)
     assert [e.heading for e in entries] == ["5.4.1", "Bacula Enterprise 18.2.5"]
+
+
+def test_copy_link_widget_text_is_not_part_of_the_heading():
+    md = "## 5.2.1.1. OADP 1.6.1 release notes Copy linkLink copied to clipboard!\n\nFixed things in 1.6.1.\n"
+    [e] = split_entries(md, {"heading_level": 2})
+    assert e.heading == "5.2.1.1. OADP 1.6.1 release notes"
+
+
+def test_line_regex_splits_on_dropdown_date_lines():
+    md = """# Release notes
+## Current release
+[![Closed](../x.gif)September 30, 2026](#)
+## Graph migration complete
+Text A.
+## Previous releases
+## 2026
+[![Closed](../x.gif)September 22, 2026](#)
+## Enhancements
+Text B.
+"""
+    entries = split_entries(md, {"line_regex": r"^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{1,2}, \d{4}$"})
+    assert [e.heading for e in entries] == ["September 30, 2026", "September 22, 2026"]
+    assert "Text A." in entries[0].body and "Text B." not in entries[0].body
+    assert entries[1].body.endswith("Text B.")

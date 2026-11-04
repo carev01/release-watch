@@ -75,12 +75,26 @@ async def test_blocked_fetch_is_suspect():
 
 
 @respx.mock
-async def test_pdf_is_suspect():
+async def test_unreadable_pdf_is_suspect():
     respx.get("https://x.com/rn.pdf").mock(return_value=httpx.Response(
         200, content=b"%PDF-1.7" + b"x" * 3000, headers={"content-type": "application/pdf"}))
     async with fast_fetcher() as f:
         r = await read_source(src("https://x.com/rn.pdf"), f)
     assert (r.outcome, r.reason) == ("suspect", "pdf_unparsed")
+
+
+@respx.mock
+async def test_pdf_text_is_one_entry():
+    from tests.fakes import tiny_pdf
+    respx.get("https://x.com/rn.pdf").mock(return_value=httpx.Response(
+        200, content=tiny_pdf(["NetWorker 19.14 Release Notes", "Fixed issue NW-123 in backups."]),
+        headers={"content-type": "application/pdf"}))
+    async with fast_fetcher() as f:
+        r = await read_source(src("https://x.com/rn.pdf", title="NetWorker 19.14 release notes (PDF)"), f)
+    assert r.outcome == "ok"
+    [e] = r.entries
+    assert (e.key, e.heading) == ("pdf", "NetWorker 19.14 release notes (PDF)")
+    assert "Fixed issue NW-123 in backups." in e.body and e.body == r.markdown
 
 
 @respx.mock

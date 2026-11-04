@@ -149,3 +149,49 @@ def test_feed_pick_lists_item_links():
     kids = pick_children(rss, "application/rss+xml", "https://h.com/feed/", {"type": "feed"})
     assert [(k.url, k.title) for k in kids] == [("https://h.com/rn/vm-backup-9-21-0-0/", "VM Backup Version 9.21.0.0"),
                                                 ("https://h.com/rn/vm-backup-9-20-0-0/", "VM Backup Version 9.20.0.0")]
+
+
+MC = "https://docs.x.com/SPX_RN/"
+
+
+def _raw(url, text, ctype="application/javascript"):
+    from release_watch.fetch import FetchResult
+    return FetchResult(url, url, 200, ctype, text, len(text), "ok", "")
+
+
+def madcap_site():
+    from tests.fakes import ScriptedFetcher
+    toc = ("define({numchunks:1,prefix:'RN_Chunk',chunkstart:['/Content/a.htm'],tree:{n:[{i:0,c:0},"
+           "{i:1,c:0,n:[{i:2,c:0,n:[{i:3,c:0},{i:4,c:0}]},{i:5,c:0,n:[{i:6,c:0}]}]}]}});")
+    chunk = ("define({'/Content/RN/title.htm':{i:[0],t:['SPX Release Notes'],b:['']},"
+             "'/Content/RN/by-version.htm':{i:[1],t:['Details by Product Version'],b:['']},"
+             "'/Content/RN/SPX-8.0.0.htm':{i:[2],t:['ShadowProtect SPX 8.0.0 (June, 2026)'],b:['']},"
+             "'/Content/RN/Enhancements-8.0.0.htm':{i:[3],t:['Enhancements'],b:['']},"
+             "'/Content/RN/Fixed Issues-8.0.0.htm':{i:[4],t:['What\\'s fixed'],b:['']},"
+             "'/Content/RN/SPX-7.5.18.htm':{i:[5],t:['ShadowProtect SPX 7.5.18 (May, 2026)'],b:['']},"
+             "'/Content/RN/Enhancements-7.5.18.htm':{i:[6],t:['Enhancements'],b:['']}});")
+    return ScriptedFetcher({
+        MC + "default.htm": _raw(MC + "default.htm", "<html><iframe name=topic></iframe></html>", "text/html"),
+        MC + "Data/HelpSystem.xml": _raw(MC + "Data/HelpSystem.xml",
+                                         '<WebHelpSystem Toc="Data/Tocs/RN.js" SkinName="HTML5"/>', "text/xml"),
+        MC + "Data/Tocs/RN.js": _raw(MC + "Data/Tocs/RN.js", toc),
+        MC + "Data/Tocs/RN_Chunk0.js": _raw(MC + "Data/Tocs/RN_Chunk0.js", chunk),
+    })
+
+
+async def test_madcap_pick_lists_toc_pages_with_their_subpages():
+    from release_watch.watch.rules import children
+    result, kids = await children(madcap_site(), MC + "default.htm",
+                                  {"pick": {"type": "madcap", "title_regex": r"SPX \d", "include_children": True}})
+    assert result.outcome == "ok"
+    assert [k.title for k in kids] == ["ShadowProtect SPX 8.0.0 (June, 2026)", "ShadowProtect SPX 7.5.18 (May, 2026)"]
+    assert kids[0].url == MC + "Content/RN/SPX-8.0.0.htm"
+    assert kids[0].parts == (MC + "Content/RN/Enhancements-8.0.0.htm", MC + "Content/RN/Fixed%20Issues-8.0.0.htm")
+
+
+async def test_madcap_pick_without_filter_lists_every_page_in_toc_order():
+    from release_watch.watch.rules import children
+    _, kids = await children(madcap_site(), MC + "default.htm", {"pick": {"type": "madcap"}})
+    assert [k.title for k in kids][:3] == ["SPX Release Notes", "Details by Product Version",
+                                           "ShadowProtect SPX 8.0.0 (June, 2026)"]
+    assert "What's fixed" in [k.title for k in kids]

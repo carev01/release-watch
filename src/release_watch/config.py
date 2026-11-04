@@ -30,6 +30,13 @@ CHROME_USER_AGENT = (
 )
 
 
+# Browserless' Chromium says "HeadlessChrome" by default, which some edges (Cohesity, Akamai) refuse.
+BROWSER_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/141.0.0.0 Safari/537.36"
+)
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="RW_", extra="ignore", hide_input_in_errors=True)
 
@@ -47,6 +54,10 @@ class Settings(BaseSettings):
     confirm_delay_seconds: int = 600
     teams_webhook_url: SecretStr = SecretStr("")
     web_base_url: str = "http://release-watch.k3s.home.lan"
+    # The shared in-cluster Browserless (a real Chrome), for hosts that refuse plain HTTP clients.
+    browserless_url: str = "http://browserless.browserless.svc.cluster.local:3000"
+    browserless_token: SecretStr = SecretStr("")
+    browser_user_agent: str = BROWSER_USER_AGENT
 
 
 def load_secrets_file(path: Path) -> dict[str, str]:

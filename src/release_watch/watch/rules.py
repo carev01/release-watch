@@ -10,7 +10,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 import feedparser
 from selectolax.lexbor import LexborHTMLParser
@@ -19,7 +19,7 @@ from release_watch.urls import normalize_url
 from release_watch.watch.extract import html_to_markdown
 from release_watch.watch.split import VERSION_RE, Entry
 
-PICK_TYPES = {"links", "sitemap", "json", "versions", "feed"}
+PICK_TYPES = {"links", "sitemap", "json", "versions", "feed", "madcap"}
 _SEGMENT = re.compile(r"^([^\[\]]+)(?:\[([^=\]]+)=([^\]]*)\])?$")
 
 
@@ -28,6 +28,7 @@ class Child:
     url: str
     title: str
     number: float | None = None
+    parts: tuple[str, ...] = ()  # sub-pages whose text belongs to this child (MadCap version folders)
 
 
 def version_tuple(v: str) -> tuple[int, ...]:
@@ -163,8 +164,73 @@ def _rewrite(url: str, rewrites: list) -> str:
     return url
 
 
+_MC_TOC = re.compile(r'Toc="([^"]+)"')
+_MC_PAGE = re.compile(r"'((?:[^'\\]|\\.)*)':\{i:\[([\d,]+)\],t:\[((?:'(?:[^'\\]|\\.)*',?)*)\]")
+_MC_STR = re.compile(r"'((?:[^'\\]|\\.)*)'")
+
+
+def _js_unescape(text: str) -> str:
+    return re.sub(r"\\(.)", r"\1", text)
+
+
+async def _madcap(fetcher, url: str, pick: dict):
+    """A MadCap Flare HTML5 help system: its table of contents lives in Data/Tocs/*.js, not in the page.
+
+    Returns (last FetchResult, children in TOC order). With `title_regex`, only matching pages are kept;
+    with `include_children`, each kept page carries its descendant pages as `parts`.
+    """
+    root = url.rsplit("/", 1)[0] + "/"
+    help_xml = await fetcher.fetch(root + "Data/HelpSystem.xml")
+    if help_xml.outcome != "ok" or not (m := _MC_TOC.search(help_xml.text)):
+        return help_xml, []
+    toc = await fetcher.fetch(urljoin(root, m.group(1)))
+    if toc.outcome != "ok":
+        return toc, []
+    meta = re.search(r"numchunks:(\d+),prefix:'([^']+)'", toc.text)
+    tree_src = toc.text[toc.text.index("tree:") + 5:toc.text.rindex("}")]
+    tree = json.loads(re.sub(r"([{,])([a-z]+):", r'\1"\2":', tree_src))
+    pages: dict[int, tuple[str, str]] = {}
+    last = toc
+    for n in range(int(meta.group(1)) if meta else 0):
+        last = await fetcher.fetch(urljoin(root, f"Data/Tocs/{meta.group(2)}{n}.js"))
+        if last.outcome != "ok":
+            return last, []
+        for pm in _MC_PAGE.finditer(last.text):
+            page_url = urljoin(root, quote(_js_unescape(pm.group(1)).lstrip("/"), safe="/#?=&%"))
+            titles = [_js_unescape(t) for t in _MC_STR.findall(pm.group(3))]
+            for i, title in zip((int(x) for x in pm.group(2).split(",")), titles):
+                pages[i] = (page_url, title)
+
+    title_re = re.compile(pick["title_regex"], re.I) if pick.get("title_regex") else None
+    kids: list[Child] = []
+
+    def descendants(node) -> list[str]:
+        out = []
+        for sub in node.get("n", []):
+            if sub["i"] in pages:
+                out.append(pages[sub["i"]][0])
+            out.extend(descendants(sub))
+        return out
+
+    def walk(nodes):
+        for node in nodes:
+            page = pages.get(node["i"])
+            if page and (title_re is None or title_re.search(page[1])):
+                parts = tuple(descendants(node)) if pick.get("include_children") else ()
+                kids.append(Child(page[0], page[1], _number(pick, page[1], page[0]), parts))
+                if title_re is not None:
+                    continue  # a kept page's sub-pages travel with it
+            walk(node.get("n", []))
+
+    walk(tree.get("n", []))
+    return last, _dedupe(kids)
+
+
 async def children(fetcher, url: str, follow: dict):
     """Fetch url, apply the rule, and follow `then` through the newest child. Returns (last FetchResult, children)."""
+    if follow.get("pick", {}).get("type") == "madcap":
+        result, kids = await _madcap(fetcher, url, follow["pick"])
+        return result, kids
     result = await fetcher.fetch(url)
     if result.outcome != "ok":
         return result, []
@@ -172,7 +238,7 @@ async def children(fetcher, url: str, follow: dict):
     if follow.get("then") and kids:
         return await children(fetcher, newest(kids, follow.get("newest", "first")).url, follow["then"])
     rewrites = follow.get("url_rewrite", [])
-    return result, [Child(_rewrite(k.url, rewrites), k.title, k.number) for k in kids]
+    return result, [Child(_rewrite(k.url, rewrites), k.title, k.number, k.parts) for k in kids]
 
 
 def _parse_date(value) -> datetime | None:

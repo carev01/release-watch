@@ -172,3 +172,61 @@ async def test_body_too_large(monkeypatch):
 def test_dell_is_fetched_one_at_a_time_and_slowly():
     p = policy_for("www.dell.com", DEFAULT_HOST_POLICIES)
     assert (p.max_concurrency, p.min_delay_ms) == (1, 3000)
+
+
+BL = "http://bl:3000"
+PAGE = "<html><body><main><h2>October 28, 2026</h2><p>Release text.</p></main></body></html>"
+
+
+def bl_settings(token="tok-secret"):
+    return Settings(database_url="postgresql+psycopg://x@y/z", docextractor_api_key="k",
+                    browserless_url=BL, browserless_token=token)
+
+
+BROWSER = {"docs.example.com": HostPolicy(browser=True, warmup_url="https://docs.example.com/en", min_delay_ms=0)}
+
+
+@respx.mock
+async def test_browser_host_is_read_through_browserless():
+    import json
+    route = respx.post(f"{BL}/function").mock(return_value=httpx.Response(200, json={"data": {
+        "html": PAGE, "finalUrl": "https://docs.example.com/rn", "status": 200, "contentType": "text/html"}}))
+    async with Fetcher(bl_settings(), BROWSER) as f:
+        r = await f.fetch("https://docs.example.com/rn")
+    assert (r.outcome, r.status, r.text, r.final_url) == ("ok", 200, PAGE, "https://docs.example.com/rn")
+    req = route.calls[0].request
+    assert req.headers["Authorization"] == "Bearer tok-secret" and "tok-secret" not in str(req.url)
+    ctx = json.loads(req.content)["context"]
+    assert ctx["url"] == "https://docs.example.com/rn" and ctx["warmupUrl"] == "https://docs.example.com/en"
+    assert "Mozilla/5.0" in ctx["userAgent"] and "Headless" not in ctx["userAgent"]
+
+
+@respx.mock
+async def test_browser_host_without_token_uses_plain_http():
+    respx.get("https://docs.example.com/rn").mock(return_value=httpx.Response(200, text=PAGE + "x" * 2000))
+    async with Fetcher(bl_settings(token=""), BROWSER) as f:
+        assert (await f.fetch("https://docs.example.com/rn")).outcome == "ok"
+
+
+@respx.mock
+async def test_browser_page_status_is_classified():
+    respx.post(f"{BL}/function").mock(return_value=httpx.Response(200, json={
+        "html": "<html>Access Denied</html>", "finalUrl": "https://docs.example.com/rn", "status": 403, "contentType": "text/html"}))
+    async with Fetcher(bl_settings(), BROWSER) as f:
+        r = await f.fetch("https://docs.example.com/rn")
+    assert (r.outcome, r.reason) == ("blocked", "forbidden")
+
+
+@respx.mock
+async def test_browserless_failure_is_an_error_without_the_token():
+    respx.post(f"{BL}/function").mock(return_value=httpx.Response(500, text="boom"))
+    async with Fetcher(bl_settings(), BROWSER) as f:
+        f._browser_retry_delay = 0
+        r = await f.fetch("https://docs.example.com/rn")
+    assert (r.outcome, r.reason) == ("error", "browserless_http_500") and "tok-secret" not in repr(r)
+
+
+def test_red_hat_and_dell_pages_use_the_browser():
+    assert policy_for("docs.redhat.com", DEFAULT_HOST_POLICIES).browser
+    assert policy_for("www.dell.com", DEFAULT_HOST_POLICIES).browser
+    assert not policy_for("dl.dell.com", DEFAULT_HOST_POLICIES).browser  # PDFs download over plain HTTP
