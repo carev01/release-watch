@@ -8,7 +8,9 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select, update
 
-from release_watch.models import CatalogProduct, Entry, EntryEvent, FetchAttempt, Snapshot, WatchedSource
+from release_watch.models import (CatalogProduct, CatalogSource, Entry, EntryEvent, FetchAttempt, Snapshot,
+                                  WatchedSource)
+from release_watch.urls import normalize_url
 from release_watch.watch.compare import Changes, Known, compare, edit_diff, gate, page_suspect
 from release_watch.watch.extract import body_hash, extract_markdown
 from release_watch.watch.readers import ReadResult, read_source
@@ -145,6 +147,8 @@ def _settle_first(sf, src, state: _State, result: ReadResult, at: datetime, coun
     """Handle everything except confirmed changes; return the source when it needs a confirmation read."""
     with sf() as s:
         row = s.get(WatchedSource, src.id)
+        if result.outcome in ("ok", "gone"):
+            _docextractor_moved(s, row, result)
         if result.outcome == "gone":
             row.state = "gone"
             _attempt(s, row, "gone", result)
@@ -324,6 +328,27 @@ async def _build_events(sf, fetcher, src, mode: str, changes: Changes) -> list[E
         if not (product and product.de_version and version_tuple(version) <= version_tuple(product.de_version)):
             events.append(_version_event(src, product, version, entry.url or src.url, status, reason))
     return events
+
+
+def _docextractor_moved(s, row, result: ReadResult) -> None:
+    """A page DocExtractor extracts (one of its articles) now redirects elsewhere or is gone: DocExtractor
+    needs the new URL. One line per new address; pages only the watch reads are its own business."""
+    if row.de_article_id is None:
+        return
+    moved = result.outcome == "ok" and result.final_url and normalize_url(result.final_url) != normalize_url(row.url)
+    if result.outcome != "gone" and not moved:
+        return
+    target = normalize_url(result.final_url) if moved else "gone"
+    dedupe = f"docextractor:{row.id}:{target}"
+    if s.scalar(select(func.count()).select_from(EntryEvent).where(EntryEvent.dedupe_key == dedupe)):
+        return
+    source = s.get(CatalogSource, row.de_source_id) if row.de_source_id else None
+    page = f"{source.name if source else row.title or row.vendor_name}: the release-notes page [{row.url}]({row.url})"
+    status = f" (HTTP {result.http_status})" if result.http_status else ""
+    heading = f"{page} now redirects to [{result.final_url}]({result.final_url})" if moved else f"{page} is gone{status}"
+    s.add(EntryEvent(id=uuid.uuid4(), source_id=row.id, kind="moved", product_de_id=row.product_de_id,
+                     heading=heading, url=result.final_url if moved else row.url, dedupe_key=dedupe, status="queued",
+                     reason="docextractor_moved" if moved else "docextractor_gone"))
 
 
 def _version_event(src, product, version: str, url: str, status: str = "queued", reason: str | None = None):

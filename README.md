@@ -80,7 +80,7 @@ Until the URL is set, the digest and job-failure alerts are kept in the web UI i
 | `sync` | 05:00 daily | Mirrors DocExtractor's catalog |
 | `discover` | 05:30 daily | Proposes new release-notes candidates for the review queue; when DocExtractor moves a URL (a version bump), the watch follows it |
 | `watch` | 06:00 daily | Reads every active source, confirms changes about 10 minutes later, gates them, writes events |
-| `digest` | 08:00 daily | Posts the summary card (versions, counts, health) and one card per new or edited entry (kept on the Notifications page while no webhook is set) |
+| `digest` | 08:00 daily | Posts the summary card and one card per new or edited entry (kept on the Notifications page while no webhook is set). The summary lists, per vendor and product, versions newer than DocExtractor tracks and DocExtractor pages that now redirect or are gone; the watch following a page to its next-version URL is not reported |
 
 Every job runs `migrate` first. The first `watch` after a source becomes active only records a baseline. Held-back items wait under **Needs a look** in the web view. Per-source selectors, split rules and newest-child rules live in `seeds/sources.yaml` under `source_config:`; apply them with `release-watch seed seeds/sources.yaml`.
 

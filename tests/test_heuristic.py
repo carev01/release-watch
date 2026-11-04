@@ -191,7 +191,7 @@ async def test_same_titled_branches_stay_separate(session_factory):
     assert urls == ["https://help.zerto.com/admin/agent/1", "https://help.zerto.com/admin/server/1"]
 
 
-async def test_moved_active_row_rebaselines_and_queues_a_moved_line(session_factory):
+async def test_moved_active_row_rebaselines_without_a_line(session_factory):
     from release_watch.models import Entry, EntryEvent, Snapshot
     await seeded(session_factory, FakeDocExtractor())
     article = str(uuid.uuid4())
@@ -209,9 +209,7 @@ async def test_moved_active_row_rebaselines_and_queues_a_moved_line(session_fact
         assert s.scalar(select(func.count()).select_from(Snapshot)) == 0
         evs = {e.status: e for e in s.scalars(select(EntryEvent))}
     assert evs["dismissed"].heading == "may have moved"  # DocExtractor settled it
-    line = evs["queued"]
-    assert line.kind == "moved" and line.url == "https://docs.x.com/11.46/rn"
-    assert line.heading == "Release-notes URL for Zerto Zerto (RN 11.44) moved: DocExtractor now uses the new URL"
+    assert "queued" not in evs  # DocExtractor made the change itself: nothing to tell the owner
 
 
 async def test_moved_candidate_row_gets_no_line(session_factory):

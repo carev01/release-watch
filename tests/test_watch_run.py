@@ -4,11 +4,12 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from release_watch.llm import LLMError
-from release_watch.models import CatalogProduct, Entry, EntryEvent, FetchAttempt, WatchedSource
+from release_watch.models import CatalogProduct, CatalogSource, Entry, EntryEvent, FetchAttempt, WatchedSource
 from release_watch.watch.run import run_watch
 from tests.fakes import ScriptedFetcher, SummaryLLM, html_page
 
 URL = "https://x.com/rn"
+NOW_DT = datetime(2026, 11, 4, tzinfo=UTC)
 DAY1 = "<h2>October 14, 2026</h2><ul><li>SAML sign-on.</li></ul><h2>September 30, 2026</h2><ul><li>Retention.</li></ul>"
 NEW = "<h2>October 28, 2026</h2><ul><li>Immutable Azure Blob.</li></ul>"
 DAY2 = NEW + DAY1
@@ -17,7 +18,7 @@ DAY2 = NEW + DAY1
 def add_source(sf, url=URL, kind="entry_page", **kw):
     with sf() as s:
         src = WatchedSource(vendor_name="Example", url=url, url_key=url, title="Updates", kind=kind,
-                            state="active", origin="seed", selector=kw.pop("selector", "main"), **kw)
+                            state="active", origin=kw.pop("origin", "seed"), selector=kw.pop("selector", "main"), **kw)
         s.add(src)
         s.commit()
         return src.id
@@ -341,3 +342,54 @@ async def test_entry_mode_sends_the_child_with_its_sub_pages(session_factory):
     [ev] = events(session_factory)
     assert ev.heading == "ShadowProtect SPX 8.0.0 (June, 2026)"
     assert ev.body.index("Intro.") < ev.body.index("Faster.") < ev.body.index("Bug 12.")
+
+
+def docextractor_source(sf, url=URL):
+    """A page DocExtractor extracts (one of its articles), as discovery adds it."""
+    pid, csid = uuid.uuid4(), uuid.uuid4()
+    with sf() as s:
+        s.add(CatalogProduct(de_id=pid, vendor_de_id=uuid.uuid4(), name="Storage Protect", synced_at=NOW_DT))
+        s.add(CatalogSource(de_id=csid, product_de_id=pid, name="Storage Protect for Mail", source_type="web",
+                            base_url="https://x.com/", active=True, synced_at=NOW_DT))
+        s.commit()
+    return add_source(sf, url, product_de_id=pid, de_source_id=csid, de_article_id=uuid.uuid4(), origin="heuristic")
+
+
+def redirected(url, final, body=DAY1):
+    page = html_page(url, body)
+    page.final_url = final
+    return page
+
+
+async def test_docextractor_page_that_redirects_queues_one_update_line(session_factory):
+    docextractor_source(session_factory)
+    for _ in range(2):
+        await run(session_factory, ScriptedFetcher({URL: redirected(URL, "https://x.com/new-rn")}))
+    [ev] = events(session_factory)
+    assert (ev.kind, ev.status, ev.reason, ev.url) == ("moved", "queued", "docextractor_moved", "https://x.com/new-rn")
+    assert ev.heading == ("Storage Protect for Mail: the release-notes page [https://x.com/rn](https://x.com/rn) "
+                          "now redirects to [https://x.com/new-rn](https://x.com/new-rn)")
+
+
+async def test_docextractor_page_gone_queues_an_update_line(session_factory):
+    docextractor_source(session_factory)
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, "", status=404, outcome="gone",
+                                                                reason="http_404")}))
+    [ev] = events(session_factory)
+    assert (ev.kind, ev.reason) == ("moved", "docextractor_gone")
+    assert ev.heading == ("Storage Protect for Mail: the release-notes page [https://x.com/rn](https://x.com/rn) "
+                          "is gone (HTTP 404)")
+
+
+async def test_redirect_of_a_page_docextractor_does_not_extract_is_silent(session_factory):
+    add_source(session_factory)
+    await run(session_factory, ScriptedFetcher({URL: redirected(URL, "https://x.com/new-rn")}))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, "", status=404, outcome="gone",
+                                                                reason="http_404")}))
+    assert events(session_factory) == []
+
+
+async def test_trivial_redirect_is_not_a_move(session_factory):
+    docextractor_source(session_factory)
+    await run(session_factory, ScriptedFetcher({URL: redirected(URL, "https://x.com/rn/")}))
+    assert events(session_factory) == []

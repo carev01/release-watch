@@ -83,17 +83,19 @@ def _capped(items: list[str]) -> list[str]:
 
 
 def summary_card(health, versions: list[tuple[str, list[str]]], counts: dict[str, dict[str, int]],
-                 now: datetime) -> dict:
-    """versions: (vendor · product, its lines) groups of new versions and moved release-notes pages."""
+                 now: datetime, updates: list[tuple[str, list[str]]] = ()) -> dict:
+    """versions and updates: (vendor · product, its lines) groups of versions newer than DocExtractor tracks
+    and of DocExtractor pages that moved."""
     blocks = [_text(f"**Release Watch · {now:%a %d %b %Y}**", size="Medium")]
-    if versions:
-        blocks.append(_text("**New versions and moved release-notes pages**"))
-        blocks += [_text(f"**{name}**\n\n" + "\n".join(f"- {line}" for line in lines)) for name, lines in versions]
+    for title, groups in (("New versions", versions), ("Update in DocExtractor", updates)):
+        if groups:
+            blocks.append(_text(f"**{title}**"))
+            blocks += [_text(f"**{name}**\n\n" + "\n".join(f"- {line}" for line in lines)) for name, lines in groups]
     if counts:
         lines = [f"- {vendor}: " + ", ".join(f"{n} {kind}" for kind, n in c.items() if n)
                  for vendor, c in sorted(counts.items())]
         blocks.append(_text("**Release notes**\n\n" + "\n".join(lines)))
-    if not versions and not counts:
+    if not versions and not updates and not counts:
         blocks.append(_text(f"No changes; {health.checked} of {health.total} sources checked"))
 
     h = [f"Checked {health.checked} of {health.total} sources"]

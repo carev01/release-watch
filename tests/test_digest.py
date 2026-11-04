@@ -62,7 +62,7 @@ async def test_digest_sends_summary_then_entries(session_factory):
     counts = await run_digest(session_factory, teams(), web_base_url="http://rw", now=NOW)
     texts = posted_texts(route)
     assert len(texts) == 3
-    assert "**Acme**\n\n- New version **2.0** ([docs page](https://acme.com/v2))" in texts[0] and "Acme: 2 new" in texts[0]
+    assert "**Acme**\n\n- Version **2.0** is available: [Updates](https://acme.com/v2)" in texts[0] and "Acme: 2 new" in texts[0]
     assert "Entry 0" in texts[1] and "Sum 0" in texts[1] and "Entry 1" in texts[2]
     assert counts == {"cards": 3, "events_sent": 3, "channel": "teams"}
     st = statuses(session_factory)
@@ -170,46 +170,75 @@ async def test_any_post_error_hides_the_url():
     assert exc.value.__cause__ is None and exc.value.__suppress_context__
 
 
-def test_version_and_moved_lines_grouped_by_vendor_and_product(session_factory):
-    sp, rp = uuid.uuid4(), uuid.uuid4()
+def product(s, name, version):
+    pid = uuid.uuid4()
+    s.add(CatalogProduct(de_id=pid, vendor_de_id=uuid.uuid4(), name=name, de_version=version, synced_at=NOW))
+    return pid
+
+
+def page(s, vendor, pid, url, h1=None, title="What's new"):
+    src = WatchedSource(vendor_name=vendor, product_de_id=pid, url=url, url_key=url, title=title, kind="entry_page",
+                        state="active", origin="successor")
+    s.add(src)
+    s.flush()
+    if h1:
+        s.add(Entry(source_id=src.id, key="k", heading="what's new", body_hash="h", body=f"# {h1}\n\nText"))
+    return src
+
+
+async def test_digest_says_what_docextractor_needs(session_factory):
     with session_factory() as s:
-        s.add(CatalogProduct(de_id=sp, vendor_de_id=uuid.uuid4(), name="Storage Protect", synced_at=NOW))
-        s.add(CatalogProduct(de_id=rp, vendor_de_id=uuid.uuid4(), name="Resiliency Platform", de_version="10.3",
-                             synced_at=NOW))
-        mail = WatchedSource(vendor_name="IBM", product_de_id=sp, url="https://ibm.com/spfm/8.2.2",
-                             url_key="https://ibm.com/spfm/8.2.2", title="What's new", kind="entry_page",
-                             state="active", origin="seed")
-        db = WatchedSource(vendor_name="IBM", product_de_id=sp, url="https://ibm.com/spfd/8.2.2",
-                           url_key="https://ibm.com/spfd/8.2.2", title="What's new", kind="entry_page",
-                           state="active", origin="heuristic")
-        coh = WatchedSource(vendor_name="Cohesity", product_de_id=rp, url="https://cohesity.com/rp",
-                            url_key="https://cohesity.com/rp", title="RP docs", kind="index_page",
-                            state="active", origin="seed")
-        s.add_all([mail, db, coh])
-        s.flush()
-        s.add(Entry(source_id=mail.id, key="k", heading="what's new", body_hash="h",
-                    body="# What's new for IBM Storage Protect for Mail\n\nText"))
-        for _ in range(2):  # two old pages merged into the same new one
+        sp, df, rp = (product(s, "Storage Protect", "8.2.2"), product(s, "Storage Defender", "2.3.1"),
+                      product(s, "Resiliency Platform", "10.3"))
+        mail = page(s, "IBM", sp, "https://ibm.com/spfm/8.2.2", "What's new for IBM Storage Protect for Mail")
+        sentinel = page(s, "IBM", df, "https://ibm.com/sentinel/2.3.2", "What's new for IBM Storage Defender Sentinel")
+        coh = page(s, "Cohesity", rp, "https://cohesity.com/rp", title="RP docs")
+        for heading in ("old mail page moved", "old domino page moved"):  # DocExtractor already tracks 8.2.2
             s.add(EntryEvent(source_id=mail.id, kind="moved", version="8.2.2", product_de_id=sp, url=mail.url,
-                             heading="Release-notes URL for IBM Storage Protect (What's new) moved to 8.2.2",
-                             status="queued"))
-        s.add(EntryEvent(source_id=db.id, kind="moved", product_de_id=sp, url=db.url, status="queued",
-                         heading="Release-notes URL for IBM Storage Protect (What's new) moved: DocExtractor now uses "
-                                 "the new URL"))
+                             heading=heading, status="queued"))
+        s.add(EntryEvent(source_id=mail.id, kind="version", version="8.2.2", product_de_id=sp, url=mail.url,
+                         heading="bumped since", status="queued"))
+        s.add(EntryEvent(source_id=sentinel.id, kind="moved", version="2.3.2", product_de_id=df, url=sentinel.url,
+                         heading="sentinel moved", status="queued"))
         s.add(EntryEvent(source_id=coh.id, kind="version", version="10.4", product_de_id=rp, url=coh.url,
-                         heading="Cohesity released a new version of Resiliency Platform: 10.4", status="queued"))
+                         heading="Cohesity released 10.4", status="queued"))
+        s.add(EntryEvent(source_id=mail.id, kind="moved", product_de_id=sp, url="https://ibm.com/b",
+                         reason="docextractor_moved", status="queued",
+                         heading="Storage Protect for Mail: the release-notes page [a](https://ibm.com/a) now "
+                                 "redirects to [b](https://ibm.com/b)"))
         s.commit()
 
-    summary = preview_digest(session_factory, web_base_url="http://rw", now=NOW)[-1]
-    texts = [b["text"] for b in summary["body"]]
-    assert "**Cohesity · Resiliency Platform**\n\n- New version **10.4** (DocExtractor tracks 10.3) " \
-           "([docs page](https://cohesity.com/rp))" in texts
-    assert "**IBM · Storage Protect**\n\n" \
-           "- [What's new for IBM Storage Protect for Mail](https://ibm.com/spfm/8.2.2) is the 8.2.2 page " \
-           "(replaces 2 older pages)\n" \
-           "- [What's new](https://ibm.com/spfd/8.2.2): DocExtractor now uses this URL" in texts
-    assert texts.index(next(t for t in texts if t.startswith("**Cohesity"))) < \
-        texts.index(next(t for t in texts if t.startswith("**IBM")))
+    texts = [b["text"] for b in preview_digest(session_factory, web_base_url="http://rw", now=NOW)[-1]["body"]]
+    assert texts[1:6] == [
+        "**New versions**",
+        "**Cohesity · Resiliency Platform**\n\n- Version **10.4** is available (DocExtractor tracks 10.3): "
+        "[RP docs](https://cohesity.com/rp)",
+        "**IBM · Storage Defender**\n\n- Version **2.3.2** is available (DocExtractor tracks 2.3.1): "
+        "[What's new for IBM Storage Defender Sentinel](https://ibm.com/sentinel/2.3.2)",
+        "**Update in DocExtractor**",
+        "**IBM · Storage Protect**\n\n- Storage Protect for Mail: the release-notes page [a](https://ibm.com/a) now "
+        "redirects to [b](https://ibm.com/b)",
+    ]
+    assert not any("8.2.2" in text for text in texts)
+
+    await run_digest(session_factory, None, web_base_url="http://rw", now=NOW)
+    st = statuses(session_factory)
+    assert {st["old mail page moved"], st["old domino page moved"], st["bumped since"]} == {"dismissed"}
+    assert {st["sentinel moved"], st["Cohesity released 10.4"]} == {"sent"}
+
+
+def test_several_pages_of_one_new_version_share_a_line(session_factory):
+    with session_factory() as s:
+        sp = product(s, "Storage Protect", "8.2.1")
+        for code in ("spfm", "spfve"):
+            src = page(s, "IBM", sp, f"https://ibm.com/{code}/8.2.2", f"What's new for IBM {code}")
+            s.add(EntryEvent(source_id=src.id, kind="moved", version="8.2.2", product_de_id=sp, url=src.url,
+                             heading=code, status="queued"))
+        s.commit()
+    texts = [b["text"] for b in preview_digest(session_factory, web_base_url="http://rw", now=NOW)[-1]["body"]]
+    assert "**IBM · Storage Protect**\n\n- Version **8.2.2** is available (DocExtractor tracks 8.2.1): " \
+           "[What's new for IBM spfm](https://ibm.com/spfm/8.2.2), " \
+           "[What's new for IBM spfve](https://ibm.com/spfve/8.2.2)" in texts
 
 
 def test_generic_page_heading_gets_the_product_the_page_names(session_factory):
@@ -225,8 +254,8 @@ def test_generic_page_heading_gets_the_product_the_page_names(session_factory):
                          heading="Release-notes URL for IBM Storage Defender (What's new) moved to 2.3.2"))
         s.commit()
     summary = preview_digest(session_factory, web_base_url="http://rw", now=NOW)[-1]
-    assert any("- [IBM Storage Defender Copy Data Management: What's new](https://ibm.com/scdm/2.3.2) is the 2.3.2 "
-               "page" in b["text"] for b in summary["body"])
+    assert any("[IBM Storage Defender Copy Data Management: What's new](https://ibm.com/scdm/2.3.2)" in b["text"]
+               for b in summary["body"])
 
 
 def test_named_product_must_be_the_tracked_product(session_factory):
@@ -243,5 +272,5 @@ def test_named_product_must_be_the_tracked_product(session_factory):
                          heading="x", status="queued"))
         s.commit()
     summary = preview_digest(session_factory, web_base_url="http://rw", now=NOW)[-1]
-    assert any("- [IBM Storage Protect Snapshot: What's new for Oracle](https://ibm.com/sps)" in b["text"]
+    assert any("[IBM Storage Protect Snapshot: What's new for Oracle](https://ibm.com/sps)" in b["text"]
                for b in summary["body"])
