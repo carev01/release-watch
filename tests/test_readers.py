@@ -103,3 +103,26 @@ async def test_duplicate_feed_keys_get_suffixes():
     async with fast_fetcher() as f:
         r = await read_source(src("https://a.com/rss", kind="feed"), f)
     assert [e.key for e in r.entries] == ["https://a/#x", "https://a/#x (2)"]
+
+
+def test_prerelease_detection():
+    from release_watch.watch.readers import is_prerelease
+    for pre in ("v1.18.4-rc.1", "v1.18.3-rc2", "2.0.0-beta.3", "Velero 1.19 Beta", "3.1.0-alpha",
+                "12.0 Preview", "4.2.0.dev1", "1.0.0-SNAPSHOT", "v2.1-pre", "10.1 Early Access", "9.0 nightly"):
+        assert is_prerelease(pre), pre
+    for ga in ("v1.18.4", "October 28, 2026", "What's new in 12.1", "Beta features now GA",
+               "Release 8.0 - previews of reports removed", "Version 9.2 Patch 1", "Velero 1.18.4 released"):
+        assert not is_prerelease(ga), ga
+
+
+@respx.mock
+async def test_prerelease_entries_are_dropped():
+    feed = """<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">
+      <entry><id>3</id><title>v1.19.0-rc.1</title><link href="https://g.com/r/v1.19.0-rc.1"/><content>c</content></entry>
+      <entry><id>2</id><title>v1.18.4</title><link href="https://g.com/r/v1.18.4"/><content>c</content></entry>
+    </feed>"""
+    respx.get("https://g.com/r.atom").mock(return_value=httpx.Response(
+        200, text=feed, headers={"content-type": "application/atom+xml"}))
+    async with fast_fetcher() as f:
+        r = await read_source(src("https://g.com/r.atom", kind="feed"), f)
+    assert [e.heading for e in r.entries] == ["v1.18.4"]

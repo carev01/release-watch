@@ -1,5 +1,6 @@
 """Read one watched source into entries, whatever its kind."""
 
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal
@@ -59,9 +60,21 @@ def unique_keys(entries: list[Entry]) -> list[Entry]:
     return entries
 
 
+# A version number with a pre-GA marker right after it: v1.18.4-rc.1, 2.0.0-beta.3, "1.19 Beta", 4.2.0.dev1.
+PRE_RELEASE = re.compile(
+    r"\bv?\d+(?:\.\d+)+(?:[-_.]|[-_.]?\s)?"
+    r"(?:rc|alpha|beta|pre(?:view|release)?|dev|nightly|snapshot|canary|early[- ]access)(?:[-_.]?\d+)*(?![a-z])",
+    re.I)
+
+
+def is_prerelease(text: str) -> bool:
+    """Release candidates, alphas, betas and previews are not releases the owner tracks."""
+    return bool(PRE_RELEASE.search(text))
+
+
 async def read_source(source: WatchedSource, fetcher) -> ReadResult:
     result = await _read(source, fetcher)
-    result.entries = unique_keys(result.entries)
+    result.entries = unique_keys([e for e in result.entries if not is_prerelease(e.heading)])
     return result
 
 
