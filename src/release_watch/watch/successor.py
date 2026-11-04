@@ -88,6 +88,14 @@ def _add_successor(s, old: WatchedSource, url: str, version: str, now) -> Watche
     return new
 
 
+def _inherit_rules(old: WatchedSource, new: WatchedSource, version: str) -> None:
+    """A page found some other way (e.g. discovery following DocExtractor) is read like the one it replaces."""
+    if new.selector is None and new.split_rule is None and not new.follow:
+        new.selector, new.split_rule, new.kind = old.selector, old.split_rule, old.kind
+        pin = (old.follow or {}).get("pin")
+        new.follow = {**old.follow, "pin": {**pin, "version": version}} if pin else old.follow
+
+
 def watch_successor(s, event: EntryEvent, url: str, now) -> WatchedSource:
     """The owner picked the new page for an unverified "may have moved" item: watch it from now on.
 
@@ -100,6 +108,7 @@ def watch_successor(s, event: EntryEvent, url: str, now) -> WatchedSource:
         new = _add_successor(s, old, url, event.version, now)
     else:
         new.state = "active"
+        _inherit_rules(old, new, event.version)
         old.superseded_by = new.id
     event.status, event.decided_at, event.dedupe_key = "dismissed", now, None
     s.flush()
@@ -139,6 +148,7 @@ async def propose_successors(session_factory, fetcher, now) -> dict[str, int]:
             taken = s.scalar(select(WatchedSource).where(WatchedSource.url_key == normalize_url(url)))
             if why is None and taken is not None and taken.state in ("active", "candidate"):
                 taken.state, old.superseded_by = "active", taken.id  # already known, e.g. via DocExtractor
+                _inherit_rules(old, taken, version)
                 s.flush()
                 if s.scalar(select(func.count()).select_from(Entry).where(Entry.source_id == taken.id)):
                     on_successor_baseline(s, taken, version)  # it has its baseline already

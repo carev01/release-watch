@@ -211,6 +211,8 @@ async def test_successor_already_watched_is_linked_not_duplicated(session_factor
     assert counts == {"proposed": 1, "unverified": 0} and events(session_factory) == []
     src = sources(session_factory)
     assert src[NEW].state == "active" and src[OLD].superseded_by == src[NEW].id
+    # it is read like the page it replaces, and keeps following new versions
+    assert src[NEW].selector == "main" and src[NEW].follow["pin"]["version"] == "8.2.2"
 
 
 async def test_successor_already_baselined_retires_the_old_page_now(session_factory):
