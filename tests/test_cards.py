@@ -64,6 +64,16 @@ def test_edited_card_shows_the_readable_diff_as_text():
     assert card["body"][0]["text"].startswith("**Edited · Vendor")
 
 
+def test_entry_cards_drop_heading_anchor_marks():
+    # Slide's docs put a "¶" anchor after each heading; the stored entry keeps it, the card doesn't.
+    ev = event("## Box v40.0.0¶\n\n* Fixed restore [¶](#fixes)\n\nSee section 7.", diff=None)
+    ev.heading = "Box v40.0.0¶"
+    [card] = entry_cards(ev, "Slide", "Slide", WEB)
+    assert card["body"][0]["text"] == "**Slide · Slide: Box v40.0.0**"
+    assert "¶" not in card_text(card)
+    assert "**Box v40.0.0**" in card_text(card) and "* Fixed restore" in card_text(card)
+
+
 def test_summary_card_empty_day():
     card = summary_card(Health(checked=742, total=748), [], {}, NOW)
     assert "No changes; 742 of 748 sources checked" in card_text(card)
@@ -87,3 +97,9 @@ def test_envelope_shape():
     assert env["attachments"][0]["contentType"] == "application/vnd.microsoft.card.adaptive"
     assert env["attachments"][0]["content"] == {"type": "AdaptiveCard"}
     json.dumps(env)
+
+
+def test_summary_card_drops_heading_anchor_marks():
+    card = summary_card(Health(checked=1, total=1), [("Slide · Slide", ["Version **41** is available: [Slide docs¶](https://s)"])],
+                        {}, NOW)
+    assert "[Slide docs](https://s)" in card_text(card) and "¶" not in card_text(card)

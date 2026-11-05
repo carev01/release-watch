@@ -9,6 +9,13 @@ LIST_CAP = 15
 _HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
 _TABLE_SEP = re.compile(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$")
 _IMAGE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+# Heading anchor marks some doc sites render after each heading ("Box v40.0.0¶", "[¶](#fixes)"). Stored entries
+# keep them, since entry keys come from headings; only the cards drop them.
+_ANCHOR_MARK = re.compile(r"\s*(?:\[¶\]\([^)]*\)|¶)")
+
+
+def _unmarked(text: str) -> str:
+    return _ANCHOR_MARK.sub("", text)
 
 
 def card_markdown(md: str) -> str:
@@ -58,8 +65,8 @@ def _card(blocks: list[dict], url: str | None = None) -> dict:
 
 def entry_cards(event, vendor: str, product: str | None, web_base_url: str) -> list[dict]:
     edited = event.kind == "edited"
-    title = f"{'Edited · ' if edited else ''}{vendor}{f' · {product}' if product else ''}: {event.heading}"
-    text = event.diff or "" if edited else card_markdown(event.body or "")
+    title = _unmarked(f"{'Edited · ' if edited else ''}{vendor}{f' · {product}' if product else ''}: {event.heading}")
+    text = _unmarked(event.diff or "" if edited else card_markdown(event.body or ""))
     parts = split_parts(text)
     summary = [_text(f"_{event.summary}_", isSubtle=True)] if event.summary else []
 
@@ -87,7 +94,8 @@ def summary_card(health, versions: list[tuple[str, list[str]]], counts: dict[str
     for title, groups in (("New versions", versions), ("Update in DocExtractor", updates)):
         if groups:
             blocks.append(_text(f"**{title}**"))
-            blocks += [_text(f"**{name}**\n\n" + "\n".join(f"- {line}" for line in lines)) for name, lines in groups]
+            blocks += [_text(_unmarked(f"**{name}**\n\n" + "\n".join(f"- {line}" for line in lines)))
+                       for name, lines in groups]
     if counts:
         lines = [f"- {vendor}: " + ", ".join(f"{n} {kind}" for kind, n in c.items() if n)
                  for vendor, c in sorted(counts.items())]
