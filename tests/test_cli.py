@@ -91,6 +91,17 @@ def test_partial_watch_is_recorded_apart_from_the_daily_watch(env):
     assert run.job == "watch-only"
 
 
+def test_watch_login_records_its_own_job(env, monkeypatch):
+    async def visits(*args, **kw):
+        return {"vendors": {}}
+
+    monkeypatch.setattr(cli, "run_login_visits", visits)
+    result = CliRunner().invoke(cli.app, ["watch-login"])
+    assert result.exit_code == 0, result.output
+    [run] = jobs(env)
+    assert (run.job, run.status) == ("watch-login", "ok")
+
+
 class RecordingTeams:
     def __init__(self):
         self.cards = []

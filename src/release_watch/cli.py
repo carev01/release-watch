@@ -7,6 +7,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 import typer
 
 from release_watch.catalog import sync_catalog
@@ -19,9 +20,12 @@ from release_watch.docextractor import DocExtractorClient
 from release_watch.fetch import Fetcher
 from release_watch.jobs import job_run
 from release_watch.llm import LLMClient
+from release_watch.notify.alert import send_alert
 from release_watch.notify.digest import run_digest
 from release_watch.notify.teams import Teams
+from release_watch.watch.login import SessionFetcher, browser_login
 from release_watch.watch.run import run_watch
+from release_watch.watch.weekly import run_login_visits
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
@@ -66,17 +70,9 @@ def _run(job: str, body) -> None:
 def _alert_failure(settings: Settings, session_factory, job: str, exc: Exception) -> None:
     """Immediate message for a job that failed outright (spec 9): to Teams, or kept for the web UI while no
     webhook is set. Never masks the original failure."""
-    from release_watch.models import Digest
-    from release_watch.notify.cards import text_card
-
-    card = text_card(f"Release Watch job {job} failed: {type(exc).__name__}")
-    teams = make_teams(settings)
     try:
-        if teams is not None:
-            asyncio.run(teams.post(card))
-        with session_factory() as s:
-            s.add(Digest(channel="teams" if teams else "web", cards=[card]))
-            s.commit()
+        asyncio.run(send_alert(make_teams(settings), session_factory,
+                               f"Release Watch job {job} failed: {type(exc).__name__}"))
     except Exception as alert_exc:
         typer.echo(f"failure alert not sent: {type(alert_exc).__name__}: {alert_exc}", err=True)
 
@@ -126,6 +122,23 @@ def watch(only: str = typer.Option(None, help="Only sources whose URL or vendor 
         typer.echo(json.dumps(counts), err=True)
         return
     _run("watch-only" if only else "watch", body)  # health reads "watch" as the daily run
+
+
+@app.command("watch-login")
+def watch_login() -> None:
+    """Weekly: sign in to AvePoint and Securiti once each and read their login-walled sources."""
+
+    async def body(settings, session_factory) -> dict:
+        teams = make_teams(settings)
+        async with httpx.AsyncClient() as client:
+            return await run_login_visits(
+                session_factory, make_llm(settings),
+                login=lambda site: browser_login(client, settings, site),
+                fetcher_for=lambda cookies: SessionFetcher(client, settings, cookies),
+                alert=lambda text: send_alert(teams, session_factory, text),
+                confirm_delay=settings.login_confirm_delay_seconds)
+
+    _run("watch-login", body)
 
 
 @app.command()
