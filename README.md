@@ -10,8 +10,8 @@ and a web review queue where the owner confirms or rejects each one.
 
 | Command | What it does | Schedule in the cluster |
 | --- | --- | --- |
-| `release-watch sync` | Mirror DocExtractor's vendors, products and sources | daily 05:00 |
-| `release-watch discover [--relabel]` | Sync, propose candidates, fetch and label them, follow DocExtractor URL changes | Daily 05:30 |
+| `release-watch sync` | Mirror DocExtractor's vendors, products and sources | daily 08:00 UTC |
+| `release-watch discover [--relabel]` | Sync, propose candidates, fetch and label them, follow DocExtractor URL changes | Daily 08:30 UTC |
 | `release-watch seed seeds/sources.yaml` | Load hand-researched sources as candidates | by hand |
 | `release-watch web` | Review queue on :8000, `/healthz` | Deployment |
 | `release-watch migrate` | `alembic upgrade head` | web init container |
@@ -59,7 +59,7 @@ Without it, those pages are fetched over plain HTTP and show as suspect in the h
 
 ### Teams notifications (Power Automate)
 
-The daily digest (08:00) and the immediate alerts are posted to a Teams group chat through a Power Automate webhook.
+The daily digest (11:00 UTC) and the immediate alerts are posted to a Teams group chat through a Power Automate webhook.
 
 1. In Power Automate, create an **instant cloud flow** with the trigger **"When a Teams webhook request is received"** (Teams connector). Set *Who can trigger the flow* to **Anyone**.
 2. Add the action **"Post card in a chat or channel"**. Post as **Flow bot**, post in **Group chat**, and pick the chat.
@@ -75,12 +75,12 @@ Until the URL is set, the digest and job-failure alerts are kept in the web UI i
 
 ### Daily jobs
 
-| Job | Schedule (America/Sao_Paulo) | What it does |
+| Job | Schedule (UTC) | What it does |
 |---|---|---|
-| `sync` | 05:00 daily | Mirrors DocExtractor's catalog |
-| `discover` | 05:30 daily | Proposes new release-notes candidates for the review queue; when DocExtractor moves a URL (a version bump), the watch follows it |
-| `watch` | 06:00 daily | Reads every active source, confirms changes about 10 minutes later, gates them, writes events |
-| `digest` | 08:00 daily | Posts the summary card and one card per new or edited entry (kept on the Notifications page while no webhook is set). The summary lists, per vendor and product, versions newer than DocExtractor tracks and DocExtractor pages that now redirect or are gone; the watch following a page to its next-version URL is not reported |
+| `sync` | 08:00 daily | Mirrors DocExtractor's catalog |
+| `discover` | 08:30 daily | Proposes new release-notes candidates for the review queue; when DocExtractor moves a URL (a version bump), the watch follows it |
+| `watch` | 09:00 daily | Reads every active source, confirms changes about 10 minutes later, gates them, writes events |
+| `digest` | 11:00 daily | Posts the summary card and one card per new or edited entry (kept on the Notifications page while no webhook is set). The summary lists, per vendor and product, versions newer than DocExtractor tracks and DocExtractor pages that now redirect or are gone; the watch following a page to its next-version URL is not reported |
 
 Every job runs `migrate` first. The first `watch` after a source becomes active only records a baseline. Held-back items wait under **Needs a look** in the web view. Per-source selectors, split rules and newest-child rules live in `seeds/sources.yaml` under `source_config:`; apply them with `release-watch seed seeds/sources.yaml`.
 

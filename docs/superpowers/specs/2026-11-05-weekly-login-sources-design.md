@@ -79,7 +79,7 @@ replaced by the help center).
 
 ## How it fits
 
-- A new CLI command and weekly CronJob (default: Mondays 06:30 America/Sao_Paulo, before the 08:00 digest). It
+- A new CLI command and weekly CronJob (default: Mondays 09:30 UTC, after the 09:00 daily watch and before the 11:00 UTC digest; all schedules are UTC). It
   records its own `job_run` job name, separate from the daily `watch`, so the daily health counts stay correct.
 - Per vendor: one Browserless session that logs in and then reads that vendor's active, login-walled sources,
   handing each page's HTML to the same reading, comparison, gating and event code the daily watch uses
