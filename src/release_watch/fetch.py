@@ -205,19 +205,24 @@ class Fetcher:
                 await asyncio.sleep(self._browser_retry_delay)
         else:
             return FetchResult(url, url, None, "", "", 0, "error", reason)
-        try:
-            body = resp.json()
-            data = body.get("data", body)
-            html, final_url = str(data["html"]), str(data.get("finalUrl") or url)
-        except (ValueError, KeyError, TypeError, AttributeError):
-            return FetchResult(url, url, None, "", "", 0, "error", "browserless_bad_payload")
-        status = data.get("status")
-        size = len(html.encode())
-        if size > MAX_BODY_BYTES:
-            return FetchResult(url, final_url, status, "", "", size, "error", "too_large")
-        outcome, why = classify_response(status, url, final_url, html, policy)
-        return FetchResult(url, final_url, status, str(data.get("contentType") or "text/html"), html, size,
-                           outcome, why)
+        return parse_browser_reply(url, resp, policy)
+
+
+def parse_browser_reply(url: str, resp: httpx.Response, policy: HostPolicy) -> FetchResult:
+    """A Browserless /function reply ({html, finalUrl, status, contentType}) as a FetchResult."""
+    try:
+        body = resp.json()
+        data = body.get("data", body)
+        html, final_url = str(data["html"]), str(data.get("finalUrl") or url)
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return FetchResult(url, url, None, "", "", 0, "error", "browserless_bad_payload")
+    status = data.get("status")
+    size = len(html.encode())
+    if size > MAX_BODY_BYTES:
+        return FetchResult(url, final_url, status, "", "", size, "error", "too_large")
+    outcome, why = classify_response(status, url, final_url, html, policy)
+    return FetchResult(url, final_url, status, str(data.get("contentType") or "text/html"), html, size,
+                       outcome, why)
 
 
 def _retry_after(resp: httpx.Response, attempt: int) -> float:

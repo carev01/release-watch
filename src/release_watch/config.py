@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     browserless_url: str = "http://browserless.browserless.svc.cluster.local:3000"
     browserless_token: SecretStr = SecretStr("")
     browser_user_agent: str = BROWSER_USER_AGENT
+    # The weekly login visit (watch-login). Only that job's pod gets these.
+    avepoint_user: SecretStr = SecretStr("")
+    avepoint_password: SecretStr = SecretStr("")
+    securiti_user: SecretStr = SecretStr("")
+    securiti_password: SecretStr = SecretStr("")
+    login_confirm_delay_seconds: int = 300
 
 
 def load_secrets_file(path: Path) -> dict[str, str]:
