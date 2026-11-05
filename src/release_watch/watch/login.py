@@ -12,8 +12,9 @@ import httpx
 
 from release_watch.config import Settings
 from release_watch.fetch import BROWSER_CONCURRENCY, BROWSER_TIMEOUT, FetchResult, HostPolicy, parse_browser_reply
+from release_watch.urls import host_of
 
-LOGIN_TIMEOUT = 150.0
+LOGIN_TIMEOUT = 240.0  # the slowest Securiti login, under Browserless' 300 s session limit
 
 # Shared by the login scripts: a stop result names the step that didn't look as expected.
 _HELPERS = r"""
@@ -84,7 +85,9 @@ export default async function ({ page, context }) {
   if (!help) return stop('help center button');
   await help.click();
   await sleep(5000);
-  const opened = new Promise(res => page.browser().once('targetcreated', t => res(t.page())));
+  // The help window, not a worker or another background target that may appear first.
+  const opened = page.browser().waitForTarget(t => t.type() === 'page' && t !== page.target(),
+                                              { timeout: 20000 }).then(t => t.page()).catch(() => null);
   let clicked = false;
   for (const frame of page.frames()) {
     const h = await frame.evaluateHandle(() => [...document.querySelectorAll('a, button, [role=button]')].find(e =>
@@ -94,7 +97,7 @@ export default async function ({ page, context }) {
     if (el) { await el.click(); clicked = true; break; }
   }
   if (!clicked) await page.mouse.click(1410, 155);  // where the icon sat at 1440x900 in the trial
-  const win = await Promise.race([opened, sleep(20000).then(() => null)]);
+  const win = await opened;
   if (!win) return stop('help center window');
   for (let i = 0; i < 20 && !win.url().startsWith('https://helpcenter.securiti.ai/'); i++) await sleep(1000);
   if (!win.url().startsWith('https://helpcenter.securiti.ai/')) return stop('help center window');
@@ -190,8 +193,10 @@ class SessionFetcher:
     """Reads each page in its own short Browserless session with the signed-in cookies, so no session runs into
     Browserless' time limit. Same FetchResult as Fetcher: a login redirect comes back "blocked"."""
 
-    def __init__(self, client: httpx.AsyncClient, settings: Settings, cookies: list[dict], *, pause: float = 2.0):
+    def __init__(self, client: httpx.AsyncClient, settings: Settings, cookies: list[dict], *,
+                 hosts: tuple[str, ...], pause: float = 2.0):
         self._client, self._settings, self._cookies, self._pause = client, settings, cookies, pause
+        self._hosts = hosts  # the vendor's sites: a page that ends anywhere else (a sign-in, the app) wasn't read
         self._sem = asyncio.Semaphore(BROWSER_CONCURRENCY)  # Browserless is shared with DocExtractor
         self._lock = asyncio.Lock()
         self._last = 0.0
@@ -215,4 +220,7 @@ class SessionFetcher:
                 return FetchResult(url, url, None, "", "", 0, "error", f"browserless_{type(exc).__name__}")
         if resp.status_code != 200:
             return FetchResult(url, url, None, "", "", 0, "error", f"browserless_http_{resp.status_code}")
-        return parse_browser_reply(url, resp, HostPolicy())
+        result = parse_browser_reply(url, resp, HostPolicy())
+        if result.outcome == "ok" and host_of(result.final_url) not in self._hosts:
+            result.outcome, result.reason = "blocked", "left_site"
+        return result

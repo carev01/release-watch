@@ -501,3 +501,14 @@ async def test_login_run_keeps_a_snapshot_of_a_page_without_entries(session_fact
     with session_factory() as s:
         [snap] = s.scalars(select(Snapshot).where(Snapshot.source_id == sid))
     assert "Faster restores." in snap.markdown
+
+
+async def test_login_run_404_is_not_read_and_never_gone(session_factory):
+    sid = docextractor_source(session_factory, AVE, login_walled=True)
+    kw = dict(login_hosts=("learn.avepoint.com",))
+    await run(session_factory, ScriptedFetcher({AVE: html_page(AVE, DAY1)}), **kw)
+    gone = html_page(AVE, "x", status=404, outcome="gone", reason="http_404")
+    counts = await run(session_factory, ScriptedFetcher({AVE: gone}), **kw)
+    with session_factory() as s:
+        assert s.get(WatchedSource, sid).state == "active"
+    assert counts["gone"] == 0 and counts["error"] == 1 and events(session_factory) == []

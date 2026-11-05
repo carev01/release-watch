@@ -80,7 +80,7 @@ async def test_login_transport_error_is_a_reason():
 async def test_session_fetcher_reads_page_with_cookies():
     route = respx.post(BL).mock(return_value=reply(html=PAGE, finalUrl=AVE, status=200, contentType="text/html"))
     async with httpx.AsyncClient() as client:
-        result = await SessionFetcher(client, settings(), COOKIES, pause=0).fetch(AVE)
+        result = await SessionFetcher(client, settings(), COOKIES, hosts=("learn.avepoint.com",), pause=0).fetch(AVE)
     assert json.loads(route.calls[0].request.content)["context"]["cookies"] == COOKIES
     assert (result.outcome, result.text, result.status) == ("ok", PAGE, 200)
 
@@ -90,7 +90,7 @@ async def test_session_fetcher_signed_out_page_is_blocked():
     respx.post(BL).mock(return_value=reply(html="<html>Sign in</html>" + "x" * 2000, status=200,
                                            finalUrl="https://learn.avepoint.com/login?returnUrl=%2Fm365"))
     async with httpx.AsyncClient() as client:
-        result = await SessionFetcher(client, settings(), COOKIES, pause=0).fetch(AVE)
+        result = await SessionFetcher(client, settings(), COOKIES, hosts=("learn.avepoint.com",), pause=0).fetch(AVE)
     assert result.outcome == "blocked"
 
 
@@ -98,5 +98,20 @@ async def test_session_fetcher_signed_out_page_is_blocked():
 async def test_session_fetcher_browserless_error_is_an_error_result():
     respx.post(BL).mock(return_value=httpx.Response(503, text="queue full"))
     async with httpx.AsyncClient() as client:
-        result = await SessionFetcher(client, settings(), COOKIES, pause=0).fetch(AVE)
+        result = await SessionFetcher(client, settings(), COOKIES, hosts=("learn.avepoint.com",), pause=0).fetch(AVE)
     assert (result.outcome, result.reason) == ("error", "browserless_http_503")
+
+
+@respx.mock
+async def test_session_fetcher_page_that_leaves_the_vendor_sites_is_blocked():
+    # Document360's sign-in, or docs.securiti.ai bouncing into the app: not the page asked for.
+    respx.post(BL).mock(return_value=reply(html=PAGE + "x" * 2000, status=200,
+                                           finalUrl="https://identity.us.document360.io/connect/authorize?x=1"))
+    async with httpx.AsyncClient() as client:
+        result = await SessionFetcher(client, settings(), COOKIES, hosts=("learn.avepoint.com",), pause=0).fetch(AVE)
+    assert (result.outcome, result.reason) == ("blocked", "left_site")
+
+
+def test_login_timeout_leaves_room_for_the_slowest_login_but_stays_under_browserless_limit():
+    from release_watch.watch.login import LOGIN_TIMEOUT
+    assert 240 <= LOGIN_TIMEOUT < 300  # Browserless TIMEOUT=300000 ms

@@ -134,7 +134,7 @@ def watch_login() -> None:
             return await run_login_visits(
                 session_factory, make_llm(settings),
                 login=lambda site: browser_login(client, settings, site),
-                fetcher_for=lambda cookies: SessionFetcher(client, settings, cookies),
+                fetcher_for=lambda cookies, hosts: SessionFetcher(client, settings, cookies, hosts=hosts),
                 alert=lambda text: send_alert(teams, session_factory, text),
                 confirm_delay=settings.login_confirm_delay_seconds)
 

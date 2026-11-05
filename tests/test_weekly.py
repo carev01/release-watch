@@ -16,7 +16,7 @@ def add(sf, url):
         s.commit()
 
 
-async def visit(sf, results: dict, pages: dict, monkeypatch=None):
+async def visit(sf, results: dict, pages: dict, alert_fails=False):
     logins, alerts = [], []
     fetcher = ScriptedFetcher(pages)
 
@@ -26,8 +26,10 @@ async def visit(sf, results: dict, pages: dict, monkeypatch=None):
 
     async def alert(text):
         alerts.append(text)
+        if alert_fails:
+            raise ConnectionError("teams down")
 
-    out = await weekly.run_login_visits(sf, SummaryLLM(), login=login, fetcher_for=lambda cookies: fetcher,
+    out = await weekly.run_login_visits(sf, SummaryLLM(), login=login, fetcher_for=lambda cookies, hosts: fetcher,
                                         alert=alert, confirm_delay=0, sites=(A, B))
     return out, logins, alerts, fetcher
 
@@ -71,3 +73,13 @@ async def test_crash_in_one_vendor_does_not_stop_the_other(session_factory, monk
     assert out["vendors"]["A"] == {"login": "ok", "reason": "crash: RuntimeError", "sources": 1, "read": 0}
     assert out["vendors"]["B"]["read"] == 1 and fetcher.calls == [B_URL]
     assert alerts == ["Release Watch: the weekly visit to A stopped (crash: RuntimeError)."]
+
+
+async def test_failed_alert_does_not_stop_the_other_vendor(session_factory):
+    add(session_factory, A_URL)
+    add(session_factory, B_URL)
+    out, _, alerts, fetcher = await visit(
+        session_factory, {"A": LoginResult(False, "browserless_http_429", []), "B": OK},
+        {B_URL: html_page(B_URL, PAGE)}, alert_fails=True)
+    assert len(alerts) == 1 and fetcher.calls == [B_URL]
+    assert out["vendors"]["A"]["login"] == "failed" and out["vendors"]["B"]["read"] == 1

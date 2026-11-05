@@ -6,8 +6,8 @@ from release_watch.notify.cards import text_card
 
 async def send_alert(teams, session_factory, text: str) -> None:
     card = text_card(text)
-    if teams is not None:
-        await teams.post(card)
-    with session_factory() as s:
+    with session_factory() as s:  # kept first, so a Teams outage never loses the alert
         s.add(Digest(channel="teams" if teams else "web", cards=[card]))
         s.commit()
+    if teams is not None:
+        await teams.post(card)

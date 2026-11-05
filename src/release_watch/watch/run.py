@@ -156,8 +156,11 @@ def _record_crash(sf, src, exc: Exception, counts) -> None:
 
 
 def _settle_first(sf, src, state: _State, result: ReadResult, at: datetime, counts,
-                  keep_snapshot: bool = False) -> _Pending | None:
+                  login_run: bool = False) -> _Pending | None:
     """Handle everything except confirmed changes; return the source when it needs a confirmation read."""
+    if login_run and result.outcome == "gone":  # a signed-out session can answer 404: not read, never gone
+        result = ReadResult("error", f"not read ({result.reason or 'gone'})", size=result.size,
+                            final_url=result.final_url, http_status=result.http_status)
     with sf() as s:
         row = s.get(WatchedSource, src.id)
         if result.outcome in ("ok", "gone"):
@@ -172,7 +175,7 @@ def _settle_first(sf, src, state: _State, result: ReadResult, at: datetime, coun
         elif (reason := page_suspect(state.prev_size, state.prev_entries, result)) or not result.entries:
             row.suspect_streak += 1
             _attempt(s, row, "suspect", result, reason or "no_entries")
-            if keep_snapshot and result.markdown:  # a weekly login page: keep its text to tune splitting offline
+            if login_run and result.markdown:  # a weekly login page: keep its text to tune splitting offline
                 s.add(Snapshot(source_id=row.id, markdown=result.markdown, hash=body_hash(result.markdown)))
             counts["suspect"] += 1
         elif not state.known:
