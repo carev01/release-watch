@@ -6,10 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 
-from release_watch.models import (CatalogProduct, CatalogSource, Entry, EntryEvent, FetchAttempt, Snapshot,
-                                  WatchedSource)
+from release_watch.models import CatalogProduct, CatalogSource, Entry, EntryEvent, FetchAttempt, Snapshot, WatchedSource
 from release_watch.urls import normalize_url
 from release_watch.watch.compare import Changes, Known, compare, gate, page_suspect, readable_diff
 from release_watch.watch.extract import body_hash, extract_markdown

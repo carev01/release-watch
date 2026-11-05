@@ -125,7 +125,7 @@ def watch(only: str = typer.Option(None, help="Only sources whose URL or vendor 
         counts = asyncio.run(body(settings, _session_factory(settings)))
         typer.echo(json.dumps(counts), err=True)
         return
-    _run("watch", body)
+    _run("watch-only" if only else "watch", body)  # health reads "watch" as the daily run
 
 
 @app.command()

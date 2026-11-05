@@ -819,6 +819,16 @@ source_config:
       version: 8.2.1
       signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
       successor: https://www.ibm.com/docs/en/storage-protect/{version}?topic=whats-new
+# 1 whole-page entry (~12 KB, sections per component, no dates or versions to split on); pinned to 8.2.2
+- url: https://www.ibm.com/docs/en/storage-protect/8.2.2?topic=release-notes
+  split_rule:
+    whole: true
+    key: release notes
+  follow:
+    pin:
+      version: 8.2.2
+      signal: https://www.ibm.com/docs/api/v1/product/storage-protect?lang=en
+      successor: https://www.ibm.com/docs/en/storage-protect/{version}?topic=release-notes
 # 1 whole-page entry (4490 chars); pinned to 8.2.1
 - url: https://www.ibm.com/docs/en/spfm/8.2.1?topic=dphd-release-notes-storage-protect-mail-data-protection-hcl-domino-version-82
   split_rule:

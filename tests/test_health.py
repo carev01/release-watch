@@ -110,3 +110,16 @@ def test_total_excludes_sources_created_after_the_watch_started(session_factory)
         s.commit()
         h = compute_health(s, NOW)
     assert (h.checked, h.total) == (1, 1)
+
+
+def test_total_excludes_sources_accepted_after_the_watch_started(session_factory):
+    # Discovered before the run but accepted in the review queue after it: first read is the next run.
+    with session_factory() as s:
+        a = src(s, "https://x.com/a")
+        later = src(s, "https://x.com/accepted-later", decided_at=NOW - timedelta(hours=1))
+        later.created_at = NOW - timedelta(hours=3)
+        watch_run(s, NOW - timedelta(hours=2))
+        s.add(FetchAttempt(source_id=a.id, outcome="same", fetched_at=NOW - timedelta(hours=1, minutes=50)))
+        s.commit()
+        h = compute_health(s, NOW)
+    assert (h.checked, h.total) == (1, 1)

@@ -28,7 +28,7 @@ dependencies = [
 release-watch = "release_watch.cli:app"
 
 [dependency-groups]
-dev = ["pytest>=8.3", "respx>=0.22", "pytest-asyncio>=0.25"]
+dev = ["pytest>=8.3", "respx>=0.22", "pytest-asyncio>=0.25", "ruff>=0.17,<0.18"]
 
 [build-system]
 requires = ["hatchling"]
@@ -42,3 +42,15 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+# Real defects (pyflakes, syntax/statement errors) and import order. Not style rewrites: the code catches broad
+# exceptions on purpose (one broken page must not stop a run) and spells regex flags re.I / re.S.
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.isort]
+known-third-party = ["alembic"]  # not the repo's alembic/ migrations folder

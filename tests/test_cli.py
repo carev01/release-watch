@@ -83,6 +83,14 @@ def test_watch_command_writes_job_run(env):
     assert (run.job, run.status, run.counts["sources"]) == ("watch", "ok", 0)
 
 
+def test_partial_watch_is_recorded_apart_from_the_daily_watch(env):
+    # Health reads "the last watch" as the daily run; a hand-run --only check must not take its place.
+    result = CliRunner().invoke(cli.app, ["watch", "--only", "example.com"])
+    assert result.exit_code == 0, result.output
+    [run] = jobs(env)
+    assert run.job == "watch-only"
+
+
 class RecordingTeams:
     def __init__(self):
         self.cards = []

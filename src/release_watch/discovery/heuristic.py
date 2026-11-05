@@ -13,9 +13,16 @@ from dataclasses import dataclass
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from release_watch.models import (CatalogProduct, CatalogSource, CatalogVendor, Entry, EntryEvent, Snapshot,
-                                  WatchedSource)
 from release_watch.docextractor import DocExtractorError
+from release_watch.models import (
+    CatalogProduct,
+    CatalogSource,
+    CatalogVendor,
+    Entry,
+    EntryEvent,
+    Snapshot,
+    WatchedSource,
+)
 from release_watch.urls import normalize_url
 
 log = logging.getLogger(__name__)

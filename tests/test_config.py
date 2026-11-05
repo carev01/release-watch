@@ -1,6 +1,5 @@
 from release_watch.config import Settings, get_settings, load_secrets_file
 
-
 SECRETS = (
     "DOC-EXTRACTOR=dxk_x\n"
     "OPENROUTER=sk-or\n"

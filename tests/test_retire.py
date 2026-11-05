@@ -30,7 +30,8 @@ def test_older_version_page_is_retired_once_the_newer_one_has_a_baseline(session
 
 def test_nothing_retired_before_the_newer_page_has_a_baseline(session_factory):
     with session_factory() as s:
-        old, new = add(s, OCP.format("4.22")), add(s, OCP.format("5.0"), baseline=False)
+        old = add(s, OCP.format("4.22"))
+        add(s, OCP.format("5.0"), baseline=False)
         assert retire_older_versions(s, NOW) == 0
         assert old.state == "active"
 

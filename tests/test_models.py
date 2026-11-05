@@ -1,13 +1,10 @@
 import pytest
-from sqlalchemy import inspect
-from sqlalchemy.exc import IntegrityError
-
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import text
+from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError
 
 from release_watch.models import Entry, EntryEvent, WatchedSource
-
 from tests.conftest import ROOT
 
 TABLES = {

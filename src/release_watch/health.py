@@ -50,8 +50,9 @@ def compute_health(s, now: datetime) -> Health:
                              .order_by(WatchedSource.vendor_name, WatchedSource.title)))
     by_id = {w.id: w for w in watched}
     last_watch = s.scalar(select(JobRun).where(JobRun.job == "watch").order_by(JobRun.started_at.desc()).limit(1))
-    # Sources added during or after the run (successors) are checked from the next run on.
-    h.total = sum(1 for w in watched if last_watch is None or w.created_at <= last_watch.started_at)
+    # Sources added or accepted during or after the run are checked from the next run on.
+    h.total = sum(1 for w in watched
+                  if last_watch is None or max(w.created_at, w.decided_at or w.created_at) <= last_watch.started_at)
     h.broken = [_label(w) for w in watched if w.suspect_streak >= BROKEN_STREAK]
     for vendor, n in s.execute(select(WatchedSource.vendor_name, func.count()).where(
             WatchedSource.state == "active", WatchedSource.login_walled.is_(True))
