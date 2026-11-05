@@ -478,6 +478,20 @@ watched_sources:
   title: Red Hat Product Life Cycle API - OpenShift Container Platform (JSON)
   notes: 'DocExtractor tracks OADP under the OpenShift docs version (5.0), so the OCP versions are the signal, not
     OADP''s own 1.x versions. Lists 5.0, 4.22, 4.21...'
+- vendor: CloudAlly
+  product: CloudAlly for MS 365
+  url: https://support.cloudally.com/api/v2/help_center/en-us/articles/15811601232284.json
+  kind: index_page
+  title: Complete Microsoft 365 User Guide (help center API, "Current version" line)
+  notes: 'The owner named this guide as where the version comes from. Its header reads "Current version: MS 365 26.2.1
+    - May 2026". The HTML page is behind a Cloudflare challenge; the public Zendesk JSON is not.'
+- vendor: Commvault
+  product: CommCell Console
+  url: https://documentation.commvault.com/11.46/software/header.html
+  kind: index_page
+  title: Commvault documentation version menu (11.46, 11.44, 11.42, 11.40, 2024e)
+  notes: 'The docs top bar loads this header; its Versions menu lists every published version. Older versions'' headers
+    are rebuilt too (11.40''s lists 11.46), so this URL keeps showing new versions. Year names like 2024e are skipped.'
 news_sources:
 - vendor: Arcserve
   product: null
@@ -1389,3 +1403,9 @@ source_config:
   follow: {"pick": {"type": "versions", "regex": "\\b(\\d{2}\\.\\d+\\.\\d+\\.\\d+)\\b"}}
 - url: "https://access.redhat.com/product-life-cycles/api/v1/products?name=Red%20Hat%20OpenShift%20Container%20Platform"
   follow: {"pick": {"type": "versions", "json_path": "data.*.versions.*.name"}}
+# 1 version, "26.2.1" (the guide's "Current version: MS 365 26.2.1 - May 2026")
+- url: "https://support.cloudally.com/api/v2/help_center/en-us/articles/15811601232284.json"
+  follow: {"pick": {"type": "versions", "json_path": "article.body", "regex": "(?s)Current version:.{0,200}?\\b(\\d+\\.\\d+\\.\\d+)\\b"}}
+# 4 versions, newest "11.46" (2024e skipped)
+- url: "https://documentation.commvault.com/11.46/software/header.html"
+  follow: {"pick": {"type": "versions", "raw": true, "regex": "data-redirect-version=\"(\\d+\\.\\d+)\""}}
