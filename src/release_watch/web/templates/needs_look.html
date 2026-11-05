@@ -34,7 +34,7 @@ Each item says why. "Send" puts it in the next digest; "Dismiss" drops it for go
   <p><strong>Why it was held:</strong> {{ it.why }}</p>
   <p class="muted">From <a href="{{ src.url | web_url }}" rel="noreferrer">{{ src.title or src.url }}</a></p>
   {% if ev.summary %}<p><em>{{ ev.summary }}</em></p>{% endif %}
-  {% if ev.diff %}<details open><summary>What changed</summary><pre class="verbatim">{{ ev.diff }}</pre></details>
+  {% if ev.diff %}<details open><summary>What changed</summary><div class="tb">{{ ev.diff | markdown }}</div></details>
   {% elif ev.body %}<details><summary>The entry as it would be sent</summary><pre class="verbatim">{{ ev.body }}</pre></details>{% endif %}
   {% endif %}
   <form method="post" action="/events/decide" class="bar">

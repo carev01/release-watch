@@ -11,9 +11,10 @@ from sqlalchemy import func, select, update
 from release_watch.models import (CatalogProduct, CatalogSource, Entry, EntryEvent, FetchAttempt, Snapshot,
                                   WatchedSource)
 from release_watch.urls import normalize_url
-from release_watch.watch.compare import Changes, Known, compare, edit_diff, gate, page_suspect
+from release_watch.watch.compare import Changes, Known, compare, gate, page_suspect, readable_diff
 from release_watch.watch.extract import body_hash, extract_markdown
 from release_watch.watch.readers import ReadResult, read_source
+from release_watch.watch.retire import retire_older_versions
 from release_watch.watch.rules import version_tuple
 from release_watch.watch.split import VERSION_RE
 from release_watch.watch.successor import on_successor_baseline, propose_successors
@@ -133,6 +134,9 @@ async def run_watch(session_factory, fetcher, llm, *, confirm_delay: float, now:
             except Exception as exc:
                 _record_crash(session_factory, p.source, exc, counts)
     counts["successors"] = await propose_successors(session_factory, fetcher, now())
+    with session_factory() as s:
+        counts["retired"] = retire_older_versions(s, now())
+        s.commit()
     return counts
 
 
@@ -283,7 +287,7 @@ async def _build_events(sf, fetcher, src, mode: str, changes: Changes) -> list[E
     decided = gate(changes)
     if mode == "entries":
         return [EntryEvent(id=uuid.uuid4(), source_id=src.id, kind=kind, heading=entry.heading,
-                           body=entry.body, diff=edit_diff(known.body, entry.body)[0] if known else None,
+                           body=entry.body, diff=readable_diff(known.body, entry.body) if known else None,
                            url=entry.url or src.url, status=status, reason=reason)
                 for kind, entry, known, status, reason in decided]
 

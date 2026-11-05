@@ -63,16 +63,13 @@ def entry_cards(event, vendor: str, product: str | None, web_base_url: str) -> l
     parts = split_parts(text)
     summary = [_text(f"_{event.summary}_", isSubtle=True)] if event.summary else []
 
-    def body_block(part):
-        return _text(part, fontType="Monospace") if edited else _text(part)
-
     if len(parts) > MAX_PARTS:
-        return [_card([_text(f"**{title} (1 of {len(parts)} parts)**"), *summary, body_block(parts[0]),
+        return [_card([_text(f"**{title} (1 of {len(parts)} parts)**"), *summary, _text(parts[0]),
                        _text(f"Full entry: {web_base_url}/events/{event.id}")], event.url)]
     cards = []
     for i, part in enumerate(parts, 1):
         suffix = f" ({i}/{len(parts)})" if len(parts) > 1 else ""
-        cards.append(_card([_text(f"**{title}{suffix}**"), *(summary if i == 1 else []), body_block(part)],
+        cards.append(_card([_text(f"**{title}{suffix}**"), *(summary if i == 1 else []), _text(part)],
                            event.url))
     return cards
 

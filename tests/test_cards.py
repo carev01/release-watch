@@ -56,11 +56,11 @@ def test_entry_cards_over_three_parts_link_to_web():
     assert cards[0]["body"][0]["text"] == "**Vendor: October 2026 (1 of 4 parts)**"
 
 
-def test_edited_card_shows_diff_monospace():
-    ev = event("body", kind="edited", diff="-* old\n+* new")
+def test_edited_card_shows_the_readable_diff_as_text():
+    ev = event("body", kind="edited", diff="**Added**\n- SCIM provisioning.")
     [card] = entry_cards(ev, "Vendor", None, WEB)
-    mono = [b for b in card["body"] if b.get("fontType") == "Monospace"]
-    assert mono and "+* new" in mono[0]["text"]
+    assert not [b for b in card["body"] if b.get("fontType") == "Monospace"]
+    assert "**Added**\n- SCIM provisioning." in card_text(card)
     assert card["body"][0]["text"].startswith("**Edited · Vendor")
 
 

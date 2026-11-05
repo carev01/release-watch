@@ -10,6 +10,6 @@
 <button name="decision" value="send">Send in next digest</button><button name="decision" value="dismiss">Dismiss</button>
 </form>
 {% endif %}
-{% if ev.diff %}<h2>Diff</h2><pre class="verbatim">{{ ev.diff }}</pre>{% endif %}
+{% if ev.diff %}<h2>What changed</h2><div class="tb">{{ ev.diff | markdown }}</div>{% endif %}
 {% if ev.body %}<h2>Verbatim entry</h2><pre class="verbatim">{{ ev.body }}</pre>{% endif %}
 {% endblock %}

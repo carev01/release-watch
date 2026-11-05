@@ -176,7 +176,7 @@ async def test_edited_entry_event_has_diff(session_factory):
     await run(session_factory, ScriptedFetcher({URL: html_page(URL, edited)}), now=later(24))
     await run(session_factory, ScriptedFetcher({URL: html_page(URL, edited)}), now=later(48))
     [ev] = events(session_factory)
-    assert ev.kind == "edited" and "+* SCIM provisioning." in ev.diff
+    assert ev.kind == "edited" and ev.diff == "**Added**\n- SCIM provisioning."
 
 
 async def test_dry_run_writes_nothing(session_factory, capsys):
@@ -249,7 +249,7 @@ async def test_edit_held_until_seen_again_next_day(session_factory):
     assert events(session_factory) == []
     await run(session_factory, ScriptedFetcher({URL: html_page(URL, edited)}), now=later(48))
     [ev] = events(session_factory)
-    assert ev.kind == "edited" and "+* SCIM provisioning." in ev.diff
+    assert ev.kind == "edited" and ev.diff == "**Added**\n- SCIM provisioning."
 
 
 async def test_daily_drift_never_becomes_an_edit(session_factory):
@@ -393,3 +393,13 @@ async def test_trivial_redirect_is_not_a_move(session_factory):
     docextractor_source(session_factory)
     await run(session_factory, ScriptedFetcher({URL: redirected(URL, "https://x.com/rn/")}))
     assert events(session_factory) == []
+
+
+async def test_watch_retires_the_older_version_page(session_factory):
+    old, new = "https://x.com/docs/4.22/rn", "https://x.com/docs/5.0/rn"
+    old_id, new_id = add_source(session_factory, old), add_source(session_factory, new)
+    counts = await run(session_factory, ScriptedFetcher({old: html_page(old, DAY1), new: html_page(new, DAY2)}))
+    assert counts["retired"] == 1
+    with session_factory() as s:
+        assert (s.get(WatchedSource, old_id).state, s.get(WatchedSource, old_id).superseded_by) == ("superseded",
+                                                                                                    new_id)

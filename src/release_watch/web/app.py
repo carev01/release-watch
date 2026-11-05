@@ -14,10 +14,11 @@ from sqlalchemy import func, select, text
 from release_watch.models import LABEL, SOURCE_STATE, CatalogProduct, Digest, EntryEvent, NewsSource, WatchedSource
 from release_watch.notify.digest import preview_digest
 from release_watch.watch.successor import watch_successor
-from release_watch.web.cards import card_html
+from release_watch.web.cards import card_html, markdown_html
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 templates.env.filters["card_html"] = card_html
+templates.env.filters["markdown"] = markdown_html
 templates.env.filters["web_url"] = lambda u: u if isinstance(u, str) and u.startswith(("http://", "https://")) else None
 
 # Why an item is in "needs a look", in words. {version} is the event's version.

@@ -139,10 +139,10 @@ def test_dismiss(client, session_factory):
 
 def test_event_page_shows_verbatim_escaped(client, session_factory):
     eid = add_event(session_factory, "Edited one", kind="edited", body="<script>alert(1)</script> text",
-                    diff="+* new line")
+                    diff="**Added**\n- new <b>line</b>")
     page = client.get(f"/events/{eid}").text
     assert "&lt;script&gt;alert(1)&lt;/script&gt; text" in page and "<script>alert" not in page
-    assert "+* new line" in page
+    assert "<strong>Added</strong>" in page and "<li>new &lt;b&gt;line&lt;/b&gt;</li>" in page
 
 
 def test_event_page_404(client):

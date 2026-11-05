@@ -15,6 +15,10 @@ def _block(block: dict) -> str:
     return f'<div class="{" ".join(classes)}">{_md.render(text)}</div>'
 
 
+def markdown_html(text: str | None) -> Markup:
+    return Markup(_md.render(text or ""))
+
+
 def card_html(card: dict) -> Markup:
     body = "".join(_block(b) for b in card.get("body", []) if b.get("type") == "TextBlock")
     actions = "".join(
