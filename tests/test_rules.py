@@ -15,6 +15,17 @@ def test_links_pick_with_regex():
                                                 ("https://x.com/rn/2026-sep", "Sep 2026")]
 
 
+def test_links_pick_title_regex_keeps_the_title_out_of_a_card_link():
+    # Blog cards wrap label, title and teaser in one link (Eon's blog list).
+    html = ('<a href="/blog/october-2026-eon-product-update"><div>Featured Article</div><div>Articles</div>'
+            '<h3>October 2026 Eon Product Update</h3><p>October’s security threats underscored the need</p></a>'
+            '<a href="/blog/other-post"><h3>Something else</h3></a>')
+    pick = {"type": "links", "href_regex": "-eon-product-update$", "title_regex": r"([A-Z][a-z]+ \d{4} Eon Product Update)"}
+    kids = pick_children(html, "text/html", "https://www.eon.io/resources", pick)
+    assert [(c.url, c.title) for c in kids] == [("https://www.eon.io/blog/october-2026-eon-product-update",
+                                                 "October 2026 Eon Product Update")]
+
+
 def test_links_pick_dedupes_urls():
     html = '<a href="/a">A</a><a href="/a">A again</a>'
     assert len(pick_children(html, "text/html", "https://x.com/", {"type": "links"})) == 1

@@ -93,6 +93,7 @@ def _links(body: str, base_url: str, pick: dict) -> list[Child]:
         anchors.extend([node] if node.tag == "a" else node.css("a"))
     href_re = re.compile(pick["href_regex"]) if pick.get("href_regex") else None
     text_re = re.compile(pick["text_regex"], re.I) if pick.get("text_regex") else None
+    title_re = re.compile(pick["title_regex"]) if pick.get("title_regex") else None  # group 1: the title in a card link
     kids = []
     for a in anchors:
         href = (a.attributes.get("href") or "").strip()
@@ -100,6 +101,8 @@ def _links(body: str, base_url: str, pick: dict) -> list[Child]:
             continue
         url = urljoin(base_url, href)
         title = re.sub(r"\s+", " ", a.text(strip=True))
+        if title_re and (m := title_re.search(title)):
+            title = m.group(1)
         if (href_re and not href_re.search(url)) or (text_re and not text_re.search(title)):
             continue
         kids.append(Child(url, title, _number(pick, title, url)))

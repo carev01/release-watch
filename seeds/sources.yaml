@@ -33,6 +33,13 @@ watched_sources:
     is the next entry.'
 - vendor: Eon
   product: Eon
+  url: https://www.eon.io/resources?*_contain=eon+product+update&category_equal=Articles
+  kind: index_page
+  title: Eon monthly product updates (blog)
+  notes: 'Since October 2026 product updates are published only on Eon''s blog ("Product updates have moved to Eon''s
+    blog" on the old docs page). Public. This is the blog filtered to "Eon product update" articles; no RSS.'
+- vendor: Eon
+  product: Eon
   url: https://docs.eon.io/whats-new/api-changelog
   kind: index_page
   selector: null
@@ -1082,6 +1089,10 @@ source_config:
 - url: "https://continuity.datto.com/help/Content/kb/EB2/EB2-release-notes.htm"
   kind: "index_page"
   follow: {"mode": "entry", "pick": {"type": "links", "selector": "#mc-main-content", "href_regex": "/kb/EB2/releases/release-notes-[a-z0-9-]+\\.htm$"}}
+# 3 children, newest "October 2026 Eon Product Update"; mode entry (one blog post per month) (2026-11-05)
+- url: "https://www.eon.io/resources?*_contain=eon+product+update&category_equal=Articles"
+  kind: "index_page"
+  follow: {"mode": "entry", "child_selector": ".blog_content", "pick": {"type": "links", "href_regex": "/blog/[a-z]+-\\d{4}-eon-product-update$", "title_regex": "([A-Z][a-z]+ \\d{4} Eon Product Update)"}}
 # 4 children, newest "Datto Backup for Microsoft Entra ID – July 2026"; mode entry (one child page per release)
 - url: "https://continuity.datto.com/help/Content/kb/Entra/entra-release-notes.htm"
   follow: {"mode": "entry", "pick": {"type": "links", "selector": "#mc-main-content", "href_regex": "/kb/Entra/releases/entra-rn-[a-z]+-\\d{4}\\.htm$"}}
