@@ -427,6 +427,57 @@ watched_sources:
   notes: 'Newest Miria 4.6 (October 2026). Backup signal: https://documentation.atempo.com/sitemap.xml lists the current version
     spaces.'
 
+# Version signals for products whose DocExtractor docs are pinned to a version (coverage page, 2026-11-05)
+- vendor: Arcserve
+  product: Arcserve Backup
+  url: https://documentation.arcserve.com/Content/DocBookshelf.htm?product=backup
+  kind: index_page
+  title: Arcserve Backup versions (documentation bookshelf)
+  notes: 'Same bookshelf as the UDP version list; the ?product= tag only gives this row its own URL. Versions are read
+    from the /Arcserve-Backup/Available/ link labels (19.0, 18.0, 17.5...).'
+- vendor: Arcserve
+  product: Arcserve RHA
+  url: https://documentation.arcserve.com/Content/DocBookshelf.htm?product=rha
+  kind: index_page
+  title: Arcserve RHA versions (documentation bookshelf)
+  notes: 'Same bookshelf; versions from the /Arcserve-RHA/Available/ link labels (18.0, 16.5, 16.0).'
+- vendor: Arctera
+  product: DLO
+  url: https://docs.backupexec.com/us/en/dlo-userdocs/pdf-handbooks.html
+  kind: index_page
+  title: DLO PDF handbooks (versions)
+  notes: 'Lists every DLO handbook as "Administrator''s Guide : v10.0 : 10.0". The page also lists Backup Exec PDFs
+    (v2014...), so the regex requires a DLO_ file name. Rate-limits bursts (one 429 seen): one read a day only.'
+- vendor: Cohesity
+  product: DataProtect
+  url: https://docs.cohesity.com/docs/dataprotect
+  kind: index_page
+  title: DataProtect documentation (current version in the page title)
+  notes: 'Public page shell of a sign-in gate (never log in); its <title> names the current version ("DataProtect 7.5").
+    Only one version shows, so a new version appears as the title changing. The old 7_5 release-notes PDF now redirects
+    to /docs/dataprotect/7.5/.'
+- vendor: HYCU
+  product: R-Cloud Hybrid Cloud Edition
+  url: https://support.hycu.com/api/v2/help_center/en-us/sections/115001018365/articles.json?per_page=100
+  kind: index_page
+  title: HYCU R-Cloud Hybrid Cloud Edition user documentation (help center API, one article per version)
+  notes: 'Public Zendesk JSON. Titles like "R-Cloud Hybrid Cloud Edition 5.3.0"; the regex keeps x.y.z for this product
+    name only (build numbers and the old HYCU for Enterprise Clouds 4.x are ignored).'
+- vendor: Dell
+  product: NetWorker
+  url: https://www.dell.com/support/kbdoc/en-us/000250114/nvp-vproxy-version-information
+  kind: index_page
+  title: NetWorker vProxy version information (NetWorker releases)
+  notes: 'No NetWorker hub lists all versions; this KB maps vProxy builds to NetWorker releases 19.10.0.0-19.14.0.1.
+    The regex wants a two-digit major and four parts, so vProxy (4.4.0-21) and vSphere (9.0.1) numbers are skipped.
+    www.dell.com needs the browser. A NetWorker release without a new vProxy build may not appear here.'
+- vendor: Red Hat
+  product: OADP
+  url: https://access.redhat.com/product-life-cycles/api/v1/products?name=Red%20Hat%20OpenShift%20Container%20Platform
+  kind: index_page
+  title: Red Hat Product Life Cycle API - OpenShift Container Platform (JSON)
+  notes: 'DocExtractor tracks OADP under the OpenShift docs version (5.0), so the OCP versions are the signal, not
+    OADP''s own 1.x versions. Lists 5.0, 4.22, 4.21...'
 news_sources:
 - vendor: Arcserve
   product: null
@@ -1093,9 +1144,9 @@ source_config:
   selector: "article"
   split_rule: {"whole": true, "key": "it analytics 11.8 introduction"}
 # 1 entries, newest "resiliency platform 10.3 release overview"; chapter ToC page as one entry; no pin possible (doc IDs in URL change per version)
-- url: "https://docs.cohesity.com/docs/resiliencyplatform/10.3/128101596-162546752-0"
+- url: "https://docs.cohesity.com/docs/resiliencyplatform/10.4/128101596-167300009-0"
   selector: "article"
-  split_rule: {"whole": true, "key": "resiliency platform 10.3 release overview"}
+  split_rule: {"whole": true, "key": "resiliency platform 10.4 release overview"}
 # 1 versions, newest "11.2.0.1"
 - url: "https://docs.cohesity.com/docs/netbackup"
   follow: {"pick": {"type": "versions", "regex": "(\\d+(?:\\.\\d+)+)\\s*\\(Latest\\)"}}
@@ -1323,3 +1374,18 @@ source_config:
 # Datto: release dates are MadCap dropdown lines, not headings (2026-11-04)
 - url: "https://saasprotection.datto.com/help/M365/Content/Additional_resources/Release_notes.html"
   split_rule: {"line_regex": "^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?( \\d{1,2},?)? \\d{4}$"}
+# Version signals added from the coverage page (2026-11-05)
+- url: "https://documentation.arcserve.com/Content/DocBookshelf.htm?product=backup"
+  follow: {"pick": {"type": "versions", "raw": true, "regex": "/Arcserve-Backup/[Aa]vailable/[^\"]+\"[^>]*>\\s*(\\d+(?:\\.\\d+)+)"}}
+- url: "https://documentation.arcserve.com/Content/DocBookshelf.htm?product=rha"
+  follow: {"pick": {"type": "versions", "raw": true, "regex": "/Arcserve-RHA/[Aa]vailable/[^\"]+\"[^>]*>\\s*(\\d+(?:\\.\\d+)+)"}}
+- url: "https://docs.backupexec.com/us/en/dlo-userdocs/pdf-handbooks.html"
+  follow: {"pick": {"type": "versions", "raw": true, "regex": "/pdf/DLO_[^\"/]*\\.pdf\"[^>]*>[^<]*?:\\s*v\\s*(\\d+(?:\\.\\d+)*)\\s*:"}}
+- url: "https://docs.cohesity.com/docs/dataprotect"
+  follow: {"pick": {"type": "versions", "raw": true, "regex": "DataProtect (\\d+(?:\\.\\d+)+) \\|"}}
+- url: "https://support.hycu.com/api/v2/help_center/en-us/sections/115001018365/articles.json?per_page=100"
+  follow: {"pick": {"type": "versions", "json_path": "articles.*.title", "regex": "Hybrid Cloud Edition (\\d+\\.\\d+\\.\\d+)"}}
+- url: "https://www.dell.com/support/kbdoc/en-us/000250114/nvp-vproxy-version-information"
+  follow: {"pick": {"type": "versions", "regex": "\\b(\\d{2}\\.\\d+\\.\\d+\\.\\d+)\\b"}}
+- url: "https://access.redhat.com/product-life-cycles/api/v1/products?name=Red%20Hat%20OpenShift%20Container%20Platform"
+  follow: {"pick": {"type": "versions", "json_path": "data.*.versions.*.name"}}
