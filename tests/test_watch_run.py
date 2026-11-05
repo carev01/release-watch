@@ -435,3 +435,16 @@ async def test_release_note_numbers_from_another_scheme_send_no_version_line(ses
     await run(session_factory, ScriptedFetcher({URL: html_page(URL, "<h2>Satori v1.2645</h2><p>New.</p>" + base)}),
               now=later(24))
     assert [e.kind for e in events(session_factory)] == ["new"]
+
+
+async def test_version_page_baseline_compares_at_docextractor_precision(session_factory):
+    import json
+
+    from release_watch.fetch import FetchResult
+    pid = versioned_product(session_factory, "10")
+    add_source(session_factory, kind="index_page", follow={"pick": {"type": "versions", "json_path": "v"}},
+               product_de_id=pid)
+    text = json.dumps({"v": ["10.0", "9.9"]})
+    await run(session_factory, ScriptedFetcher({URL: FetchResult(URL, URL, 200, "application/json", text, len(text),
+                                                                 "ok", "")}))
+    assert events(session_factory) == []

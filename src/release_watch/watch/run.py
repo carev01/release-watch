@@ -329,7 +329,7 @@ async def _build_events(sf, fetcher, src, mode: str, changes: Changes) -> list[E
             found.append((version, entry, status, reason))
     if found:
         version, entry, status, reason = max(found, key=lambda f: version_tuple(f[0]))
-        if not (product and product.de_version and version_tuple(version) <= version_tuple(product.de_version)):
+        if not (product and product.de_version and not newer_than_tracked(version, product.de_version)):
             events.append(_version_event(src, product, version, entry.url or src.url, status, reason))
     return events
 
@@ -388,7 +388,7 @@ def _baseline_versions(s, row, entries) -> None:
     if _mode(row) != "versions" or not (product and product.de_version and versions):
         return
     top = max(versions, key=version_tuple)
-    if version_tuple(top) > version_tuple(product.de_version):
+    if newer_than_tracked(top, product.de_version):
         ev = _version_event(row, product, top, row.url)
         if not s.scalar(select(func.count()).select_from(EntryEvent).where(EntryEvent.dedupe_key == ev.dedupe_key)):
             s.add(ev)
