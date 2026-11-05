@@ -14,3 +14,11 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
   valueFrom: { secretKeyRef: { name: {{ $.Values.existingSecret }}, key: {{ $key }}, optional: true } }
 {{- end }}
 {{- end -}}
+
+{{/* The weekly login visit's vendor credentials: only the watch-login job gets these. */}}
+{{- define "rw.loginEnv" -}}
+{{- range $key := list "RW_AVEPOINT_USER" "RW_AVEPOINT_PASSWORD" "RW_SECURITI_USER" "RW_SECURITI_PASSWORD" }}
+- name: {{ $key }}
+  valueFrom: { secretKeyRef: { name: {{ $.Values.existingSecret }}, key: {{ $key }}, optional: true } }
+{{- end }}
+{{- end -}}

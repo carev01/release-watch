@@ -6,6 +6,7 @@ image:
 # Created by hand, never in values (see README):
 #   RW_DOCEXTRACTOR_API_KEY, RW_AZURE_OPENAI_API_KEY, RW_AZURE_OPENAI_ENDPOINT,
 #   RW_OPENROUTER_API_KEY, RW_TEAMS_WEBHOOK_URL, RW_BROWSERLESS_TOKEN, POSTGRES_PASSWORD (URL-safe characters only)
+#   RW_AVEPOINT_USER, RW_AVEPOINT_PASSWORD, RW_SECURITI_USER, RW_SECURITI_PASSWORD (weekly login visit only)
 existingSecret: release-watch-secrets
 
 timezone: UTC  # everything in UTC: schedules, logs, the web UI and the digest
@@ -24,6 +25,7 @@ cron:
   discover: "30 8 * * *"
   watch: "0 9 * * *"
   digest: "0 11 * * *"
+  watchLogin: "30 9 * * 1"  # Mondays: the weekly login visit (AvePoint, Securiti)
   deadlineSeconds: 10800
   resources:
     requests: { cpu: 100m, memory: 256Mi }

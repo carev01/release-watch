@@ -12,6 +12,7 @@ and a web review queue where the owner confirms or rejects each one.
 | --- | --- | --- |
 | `release-watch sync` | Mirror DocExtractor's vendors, products and sources | daily 08:00 UTC |
 | `release-watch discover [--relabel]` | Sync, propose candidates, fetch and label them, follow DocExtractor URL changes | Daily 08:30 UTC |
+| `release-watch watch-login` | Sign in to AvePoint and Securiti once each and read their login-walled sources | Mondays 09:30 UTC |
 | `release-watch seed seeds/sources.yaml` | Load hand-researched sources as candidates | by hand |
 | `release-watch web` | Review queue on :8000, `/healthz` | Deployment |
 | `release-watch migrate` | `alembic upgrade head` | web init container |
@@ -73,6 +74,18 @@ kubectl -n release-watch patch secret release-watch-secrets --type merge \
 
 Until the URL is set, the digest and job-failure alerts are kept in the web UI instead, on the Notifications page (http://release-watch.k3s.home.lan/notifications), which also previews the next digest. To print the cards as JSON without sending: `kubectl -n release-watch exec deploy/release-watch-web -- release-watch digest --dry-run` (or locally, `uv run release-watch digest --dry-run`).
 
+### Weekly login (AvePoint, Securiti)
+
+Every Monday at 09:30 UTC the `watch-login` job signs in once to each vendor through the shared Browserless and reads that vendor's login-walled sources with the signed-in cookies. Its results go through the same checks as the daily watch, except that an edit counts once it shows on both reads of the same visit. A failed login is never retried: it sends one alert, and the health block shows it until the next good visit. The credentials go only to this job's pod. Add them to the Secret by hand (placeholders shown):
+
+```bash
+kubectl -n release-watch patch secret release-watch-secrets --type merge -p '{"stringData":{
+ "RW_AVEPOINT_USER":"<login id>","RW_AVEPOINT_PASSWORD":"<password>",
+ "RW_SECURITI_USER":"<email>","RW_SECURITI_PASSWORD":"<password>"}}'
+```
+
+To run a visit by hand (it logs in once per vendor): `kubectl -n release-watch create job rw-login-manual --from=cronjob/release-watch-watch-login`.
+
 ### Daily jobs
 
 | Job | Schedule (UTC) | What it does |
@@ -81,6 +94,7 @@ Until the URL is set, the digest and job-failure alerts are kept in the web UI i
 | `discover` | 08:30 daily | Proposes new release-notes candidates for the review queue; when DocExtractor moves a URL (a version bump), the watch follows it |
 | `watch` | 09:00 daily | Reads every active source, confirms changes about 10 minutes later, gates them, writes events |
 | `digest` | 11:00 daily | Posts the summary card and one card per new or edited entry (kept on the Notifications page while no webhook is set). The summary lists, per vendor and product, versions newer than DocExtractor tracks and DocExtractor pages that now redirect or are gone; the watch following a page to its next-version URL is not reported |
+| `watch-login` | 09:30 Mondays | Signs in to AvePoint and Securiti once each and reads their login-walled pages (one login per vendor; a failed login sends one alert) |
 
 Every job runs `migrate` first. The first `watch` after a source becomes active only records a baseline. Held-back items wait under **Needs a look** in the web view. Per-source selectors, split rules and newest-child rules live in `seeds/sources.yaml` under `source_config:`; apply them with `release-watch seed seeds/sources.yaml`.
 
