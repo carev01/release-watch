@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from release_watch.llm import LLMError
-from release_watch.models import CatalogProduct, CatalogSource, Entry, EntryEvent, FetchAttempt, WatchedSource
+from release_watch.models import CatalogProduct, CatalogSource, Entry, EntryEvent, FetchAttempt, Snapshot, WatchedSource
 from release_watch.watch.run import run_watch
 from tests.fakes import ScriptedFetcher, SummaryLLM, html_page
 
@@ -344,7 +344,7 @@ async def test_entry_mode_sends_the_child_with_its_sub_pages(session_factory):
     assert ev.body.index("Intro.") < ev.body.index("Faster.") < ev.body.index("Bug 12.")
 
 
-def docextractor_source(sf, url=URL):
+def docextractor_source(sf, url=URL, **kw):
     """A page DocExtractor extracts (one of its articles), as discovery adds it."""
     pid, csid = uuid.uuid4(), uuid.uuid4()
     with sf() as s:
@@ -352,7 +352,8 @@ def docextractor_source(sf, url=URL):
         s.add(CatalogSource(de_id=csid, product_de_id=pid, name="Storage Protect for Mail", source_type="web",
                             base_url="https://x.com/", active=True, synced_at=NOW_DT))
         s.commit()
-    return add_source(sf, url, product_de_id=pid, de_source_id=csid, de_article_id=uuid.uuid4(), origin="heuristic")
+    return add_source(sf, url, product_de_id=pid, de_source_id=csid, de_article_id=uuid.uuid4(), origin="heuristic",
+                      **kw)
 
 
 def redirected(url, final, body=DAY1):
@@ -448,3 +449,55 @@ async def test_version_page_baseline_compares_at_docextractor_precision(session_
     await run(session_factory, ScriptedFetcher({URL: FetchResult(URL, URL, 200, "application/json", text, len(text),
                                                                  "ok", "")}))
     assert events(session_factory) == []
+
+
+AVE = "https://learn.avepoint.com/m365/whats-new.html"
+
+
+async def test_login_run_reads_only_login_sources_on_its_hosts(session_factory):
+    add_source(session_factory)  # public
+    add_source(session_factory, AVE, login_walled=True)  # this vendor
+    add_source(session_factory, "https://other.com/rn", login_walled=True)
+    fetcher = ScriptedFetcher({AVE: html_page(AVE, DAY1)})
+    counts = await run(session_factory, fetcher, login_hosts=("learn.avepoint.com",))
+    assert fetcher.calls == [AVE] and counts["sources"] == 1 and counts["baseline"] == 1
+    assert "successors" not in counts and "retired" not in counts
+
+
+async def test_same_visit_edit_is_sent_on_the_confirming_read(session_factory):
+    add_source(session_factory, AVE, login_walled=True)
+    edited = DAY1.replace("<li>SAML sign-on.</li>", "<li>SAML sign-on.</li><li>SCIM provisioning.</li>")
+    kw = dict(login_hosts=("learn.avepoint.com",), same_visit_edits=True)
+    await run(session_factory, ScriptedFetcher({AVE: html_page(AVE, DAY1)}), now=later(0), **kw)
+    await run(session_factory, ScriptedFetcher({AVE: html_page(AVE, edited)}), now=later(168), **kw)
+    [ev] = events(session_factory)
+    assert ev.kind == "edited" and ev.diff == "**Added**\n- SCIM provisioning."
+
+
+async def test_login_source_redirect_goes_to_needs_look(session_factory):
+    docextractor_source(session_factory, AVE, login_walled=True)
+    for _ in range(2):
+        await run(session_factory, ScriptedFetcher({AVE: redirected(AVE, "https://learn.avepoint.com/m365/new.html")}),
+                  login_hosts=("learn.avepoint.com",))
+    [ev] = events(session_factory)
+    assert (ev.kind, ev.status, ev.reason) == ("moved", "needs_look", "docextractor_moved")
+
+
+async def test_login_run_signed_out_page_is_never_compared(session_factory):
+    sid = add_source(session_factory, AVE, login_walled=True)
+    kw = dict(login_hosts=("learn.avepoint.com",), same_visit_edits=True)
+    await run(session_factory, ScriptedFetcher({AVE: html_page(AVE, DAY1)}), **kw)
+    signed_out = html_page(AVE, "Redirecting…", outcome="blocked", reason="session_redirect")
+    await run(session_factory, ScriptedFetcher({AVE: signed_out}), **kw)
+    with session_factory() as s:
+        assert all(e.removed_at is None for e in s.scalars(select(Entry).where(Entry.source_id == sid)))
+    assert events(session_factory) == []
+
+
+async def test_login_run_keeps_a_snapshot_of_a_page_without_entries(session_factory):
+    sid = add_source(session_factory, AVE, login_walled=True)
+    await run(session_factory, ScriptedFetcher({AVE: html_page(AVE, "<h2>Server</h2><p>Faster restores.</p>")}),
+              login_hosts=("learn.avepoint.com",))
+    with session_factory() as s:
+        [snap] = s.scalars(select(Snapshot).where(Snapshot.source_id == sid))
+    assert "Faster restores." in snap.markdown

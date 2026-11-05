@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, select
 
 from release_watch.models import CatalogProduct, CatalogSource, Entry, EntryEvent, FetchAttempt, Snapshot, WatchedSource
-from release_watch.urls import normalize_url
+from release_watch.urls import host_of, normalize_url
 from release_watch.watch.compare import Changes, Known, compare, gate, page_suspect, readable_diff
 from release_watch.watch.extract import body_hash, extract_markdown
 from release_watch.watch.readers import ReadResult, read_source
@@ -81,11 +81,17 @@ def _confirmed(first: Changes, second: Changes) -> Changes:
 
 
 async def run_watch(session_factory, fetcher, llm, *, confirm_delay: float, now: Callable[[], datetime] = utcnow,
-                    sleep=asyncio.sleep, only: str | None = None, dry_run: bool = False, out=print) -> dict:
+                    sleep=asyncio.sleep, only: str | None = None, dry_run: bool = False, out=print,
+                    login_hosts: tuple[str, ...] | None = None, same_visit_edits: bool = False) -> dict:
+    """The daily watch, or with login_hosts a weekly login visit: only the login-walled sources on those hosts
+    (read through a signed-in fetcher). same_visit_edits sends an edit seen on both reads of this run at once."""
+    login_run = login_hosts is not None
     with session_factory() as s:
-        query = select(WatchedSource).where(WatchedSource.state == "active", WatchedSource.login_walled.is_(False))
+        query = select(WatchedSource).where(WatchedSource.state == "active",
+                                            WatchedSource.login_walled.is_(login_run))
         sources = [src for src in s.scalars(query)
-                   if not only or only.lower() in src.url.lower() or only.lower() in src.vendor_name.lower()]
+                   if (not login_run or host_of(src.url) in login_hosts)
+                   and (not only or only.lower() in src.url.lower() or only.lower() in src.vendor_name.lower())]
         states = {src.id: _load_state(s, src.id) for src in sources}
 
     gate_sem = asyncio.Semaphore(MAX_PARALLEL)
@@ -115,7 +121,7 @@ async def run_watch(session_factory, fetcher, llm, *, confirm_delay: float, now:
     pending: list[_Pending] = []
     for src, result in zip(sources, results):
         try:
-            p = _settle_first(session_factory, src, states[src.id], result, now(), counts)
+            p = _settle_first(session_factory, src, states[src.id], result, now(), counts, login_run)
         except Exception as exc:  # one source's storage failure must not stop the others
             _record_crash(session_factory, src, exc, counts)
             continue
@@ -129,9 +135,12 @@ async def run_watch(session_factory, fetcher, llm, *, confirm_delay: float, now:
         again = await asyncio.gather(*(read(p.source) for p in pending))
         for p, second in zip(pending, again):
             try:
-                await _settle_confirmed(session_factory, fetcher, llm, p, second, now(), counts)
+                await _settle_confirmed(session_factory, fetcher, llm, p, second, now(), counts,
+                                        same_visit_edits=same_visit_edits)
             except Exception as exc:
                 _record_crash(session_factory, p.source, exc, counts)
+    if login_run:  # successors and retirement are the daily watch's business
+        return counts
     counts["successors"] = await propose_successors(session_factory, fetcher, now())
     with session_factory() as s:
         counts["retired"] = retire_older_versions(s, now())
@@ -146,7 +155,8 @@ def _record_crash(sf, src, exc: Exception, counts) -> None:
     counts["error"] += 1
 
 
-def _settle_first(sf, src, state: _State, result: ReadResult, at: datetime, counts) -> _Pending | None:
+def _settle_first(sf, src, state: _State, result: ReadResult, at: datetime, counts,
+                  keep_snapshot: bool = False) -> _Pending | None:
     """Handle everything except confirmed changes; return the source when it needs a confirmation read."""
     with sf() as s:
         row = s.get(WatchedSource, src.id)
@@ -162,6 +172,8 @@ def _settle_first(sf, src, state: _State, result: ReadResult, at: datetime, coun
         elif (reason := page_suspect(state.prev_size, state.prev_entries, result)) or not result.entries:
             row.suspect_streak += 1
             _attempt(s, row, "suspect", result, reason or "no_entries")
+            if keep_snapshot and result.markdown:  # a weekly login page: keep its text to tune splitting offline
+                s.add(Snapshot(source_id=row.id, markdown=result.markdown, hash=body_hash(result.markdown)))
             counts["suspect"] += 1
         elif not state.known:
             for e in result.entries:
@@ -224,7 +236,8 @@ def _write_entries(s, row, changes: Changes, at: datetime, *, new: list | None =
     row.suspect_streak, row.last_ok_at = 0, at
 
 
-async def _settle_confirmed(sf, fetcher, llm, p: _Pending, second: ReadResult, at, counts) -> None:
+async def _settle_confirmed(sf, fetcher, llm, p: _Pending, second: ReadResult, at, counts, *,
+                            same_visit_edits: bool = False) -> None:
     src = p.source
     if second.outcome != "ok" or page_suspect(p.state.prev_size, p.state.prev_entries, second):
         with sf() as s:
@@ -242,9 +255,10 @@ async def _settle_confirmed(sf, fetcher, llm, p: _Pending, second: ReadResult, a
         counts["suspect"] += 1
         return
 
-    # Edits wait for a second daily sighting of the same new body (spec 7.3: no false edits).
-    fire, pend = [], {}
-    for entry, known in changes.edited:
+    # Edits wait for a second daily sighting of the same new body (spec 7.3: no false edits). A weekly login
+    # visit confirms within the visit instead: both of its reads already showed the edit.
+    fire, pend = ([e for e, _ in changes.edited] if same_visit_edits else []), {}
+    for entry, known in [] if same_visit_edits else changes.edited:
         h = body_hash(entry.body)
         if known.pending_hash == h and known.pending_since and at - known.pending_since >= EDIT_HOLD:
             fire.append(entry)
@@ -366,8 +380,10 @@ def _docextractor_moved(s, row, result: ReadResult) -> None:
     page = f"{source.name if source else row.title or row.vendor_name}: the release-notes page [{row.url}]({row.url})"
     status = f" (HTTP {result.http_status})" if result.http_status else ""
     heading = f"{page} now redirects to [{result.final_url}]({result.final_url})" if moved else f"{page} is gone{status}"
+    # Redirects inside a signed-in session are often harmless (return URLs, slug redirects): a person checks those.
+    queue = "needs_look" if row.login_walled else "queued"
     s.add(EntryEvent(id=uuid.uuid4(), source_id=row.id, kind="moved", product_de_id=row.product_de_id,
-                     heading=heading, url=result.final_url if moved else row.url, dedupe_key=dedupe, status="queued",
+                     heading=heading, url=result.final_url if moved else row.url, dedupe_key=dedupe, status=queue,
                      reason="docextractor_moved" if moved else "docextractor_gone"))
 
 
