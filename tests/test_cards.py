@@ -80,13 +80,13 @@ def test_summary_card_empty_day():
 
 
 def test_summary_card_lists_versions_counts_and_health():
-    h = Health(checked=10, total=12, failed=["V: a (http_500)"], broken=["V: b"], waiting_login={"AvePoint": 26},
+    h = Health(checked=10, total=12, failed=["V: a (http_500)"], broken=["V: b"], weekly_login="Weekly login: AvePoint 26 of 26 read Mon 02 Nov",
                needs_look=2, needs_look_stale=1, sync_error="boom", last_watch_ok=NOW)
     card = summary_card(h, [("Acme · Box", ["New version **2.0** ([docs](https://a))"])],
                         {"Acme": {"new": 2, "edited": 1}}, NOW)
     text = card_text(card)
     for needle in ("**Acme · Box**\n\n- New version **2.0** ([docs](https://a))", "Acme: 2 new, 1 edited", "Checked 10 of 12 sources",
-                   "V: a (http_500)", "V: b", "AvePoint 26", "Rubrik, Cohesity", "2 in needs a look (1 older than 3 days)",
+                   "V: a (http_500)", "V: b", "Weekly login: AvePoint 26 of 26 read Mon 02 Nov", "Rubrik, Cohesity", "2 in needs a look (1 older than 3 days)",
                    "boom"):
         assert needle in text, needle
 

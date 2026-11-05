@@ -41,15 +41,44 @@ def test_broken_after_three_suspect_days(session_factory):
         assert compute_health(s, NOW).broken == ["V: a"]
 
 
-def test_waiting_login_grouped_by_vendor(session_factory):
+def login_run(s, started, counts=None, status="ok"):
+    s.add(JobRun(job="watch-login", started_at=started, finished_at=started + timedelta(minutes=30), status=status,
+                 counts=counts or {}))
+
+
+def test_weekly_login_line_per_vendor(session_factory):
     with session_factory() as s:
-        for i in range(3):
-            src(s, f"https://ave.com/{i}", vendor="AvePoint", login_walled=True)
-        src(s, "https://eon.io/a", vendor="Eon", login_walled=True)
+        login_run(s, datetime(2026, 11, 2, 9, 30, tzinfo=UTC), {"vendors": {
+            "AvePoint": {"login": "ok", "sources": 26, "read": 26},
+            "Securiti": {"login": "failed", "reason": "stopped at password field", "sources": 29, "read": 0}}})
         s.commit()
         h = compute_health(s, NOW)
-    assert h.waiting_login == {"AvePoint": 3, "Eon": 1} and h.total == 0
+    assert h.weekly_login == ("Weekly login: AvePoint 26 of 26 read Mon 02 Nov, "
+                              "Securiti login failed Mon 02 Nov (stopped at password field)")
     assert h.public_only == ["Rubrik", "Cohesity"]
+
+
+def test_weekly_login_stale_after_eight_days(session_factory):
+    with session_factory() as s:
+        login_run(s, datetime(2026, 10, 26, 9, 30, tzinfo=UTC), {"vendors": {
+            "AvePoint": {"login": "ok", "sources": 26, "read": 26}}})
+        s.commit()
+        h = compute_health(s, NOW)
+    assert h.weekly_login == "Weekly login: no visit since Mon 26 Oct"
+
+
+def test_weekly_login_failed_job(session_factory):
+    with session_factory() as s:
+        login_run(s, datetime(2026, 11, 2, 9, 30, tzinfo=UTC), status="failed")
+        s.commit()
+        h = compute_health(s, NOW)
+    assert h.weekly_login == "Weekly login: the visit on Mon 02 Nov failed"
+
+
+def test_weekly_login_never_ran(session_factory):
+    with session_factory() as s:
+        h = compute_health(s, NOW)
+    assert h.weekly_login == "Weekly login: no visit yet"
 
 
 def test_needs_look_stale_after_three_days(session_factory):

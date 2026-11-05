@@ -108,8 +108,8 @@ def summary_card(health, versions: list[tuple[str, list[str]]], counts: dict[str
                          ("Broken (3+ suspect days)", health.broken), ("Gone", health.gone_new)):
         if items:
             h.append(f"{label}:\n" + "\n".join(f"- {i}" for i in _capped(items)))
-    if health.waiting_login:
-        h.append("Waiting for login (phase 3): " + ", ".join(f"{v} {n}" for v, n in health.waiting_login.items()))
+    if health.weekly_login:
+        h.append(health.weekly_login)
     h.append("Public sources only: " + ", ".join(health.public_only))
     if health.needs_look:
         h.append(f"{health.needs_look} in needs a look ({health.needs_look_stale} older than 3 days)")

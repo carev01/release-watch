@@ -11,6 +11,7 @@ PUBLIC_ONLY = ["Rubrik", "Cohesity"]
 BROKEN_STREAK = 3
 NEEDS_LOOK_STALE = timedelta(days=3)
 STALE_JOB = timedelta(hours=6)
+LOGIN_VISIT_STALE = timedelta(days=8)  # the weekly login visit runs every Monday
 
 
 @dataclass
@@ -21,7 +22,7 @@ class Health:
     suspect: list[str] = field(default_factory=list)
     broken: list[str] = field(default_factory=list)
     gone_new: list[str] = field(default_factory=list)
-    waiting_login: dict[str, int] = field(default_factory=dict)
+    weekly_login: str = ""
     public_only: list[str] = field(default_factory=lambda: list(PUBLIC_ONLY))
     needs_look: int = 0
     needs_look_stale: int = 0
@@ -43,6 +44,27 @@ def _mark_stale_jobs(s, now) -> list[str]:
     return [run.job for run in stale]
 
 
+def _weekly_login(s, now: datetime) -> str:
+    """The last weekly login visit, per vendor; a failed or missing visit says so."""
+    run = s.scalar(select(JobRun).where(JobRun.job == "watch-login").order_by(JobRun.started_at.desc()).limit(1))
+    if run is None:
+        return "Weekly login: no visit yet"
+    day = f"{run.started_at:%a %d %b}"
+    if now - run.started_at > LOGIN_VISIT_STALE:
+        return f"Weekly login: no visit since {day}"
+    if run.status == "failed":
+        return f"Weekly login: the visit on {day} failed"
+    parts = []
+    for name, v in ((run.counts or {}).get("vendors") or {}).items():
+        if v.get("login") == "ok" and not v.get("reason"):
+            parts.append(f"{name} {v.get('read', 0)} of {v.get('sources', 0)} read {day}")
+        elif v.get("login") == "ok":
+            parts.append(f"{name} visit stopped {day} ({v['reason']})")
+        else:
+            parts.append(f"{name} login failed {day} ({v.get('reason', 'unknown')})")
+    return "Weekly login: " + (", ".join(parts) if parts else f"no login sources on {day}")
+
+
 def compute_health(s, now: datetime) -> Health:
     h = Health(stale_jobs=_mark_stale_jobs(s, now))
     active = select(WatchedSource).where(WatchedSource.state == "active")
@@ -54,10 +76,7 @@ def compute_health(s, now: datetime) -> Health:
     h.total = sum(1 for w in watched
                   if last_watch is None or max(w.created_at, w.decided_at or w.created_at) <= last_watch.started_at)
     h.broken = [_label(w) for w in watched if w.suspect_streak >= BROKEN_STREAK]
-    for vendor, n in s.execute(select(WatchedSource.vendor_name, func.count()).where(
-            WatchedSource.state == "active", WatchedSource.login_walled.is_(True))
-            .group_by(WatchedSource.vendor_name).order_by(WatchedSource.vendor_name)):
-        h.waiting_login[vendor] = n
+    h.weekly_login = _weekly_login(s, now)
 
     if last_watch is not None:
         window_end = last_watch.finished_at or now
