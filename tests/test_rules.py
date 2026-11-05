@@ -195,3 +195,19 @@ async def test_madcap_pick_without_filter_lists_every_page_in_toc_order():
     assert [k.title for k in kids][:3] == ["SPX Release Notes", "Details by Product Version",
                                            "ShadowProtect SPX 8.0.0 (June, 2026)"]
     assert "What's fixed" in [k.title for k in kids]
+
+
+def test_newer_than_tracked_compares_at_docextractor_precision():
+    from release_watch.watch.rules import newer_than_tracked
+    assert newer_than_tracked("1.19.0", "1.18") and newer_than_tracked("10.4", "10.3")
+    assert not newer_than_tracked("1.18.5", "1.18")  # a patch of the tracked docs version
+    assert not newer_than_tracked("8.2.2", "8.2.2") and not newer_than_tracked("25-0", "25-1")
+    assert newer_than_tracked("2027.1", "2026.2.1") and newer_than_tracked("26-0", "25-1")
+
+
+def test_same_version_line_rejects_numbers_from_another_scheme():
+    from release_watch.watch.rules import same_version_line
+    assert same_version_line("1.19.0", "1.18") and same_version_line("2.0", "1.18")
+    assert same_version_line("10.9", "10.9") and same_version_line("9.4", "10.9")
+    assert not same_version_line("1.6", "5.0")  # OADP's own versions vs the OpenShift docs version
+    assert not same_version_line("1.2645", "11.46")  # a component's build number vs the product release

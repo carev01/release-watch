@@ -13,7 +13,7 @@ from sqlalchemy import select
 from release_watch.health import compute_health
 from release_watch.models import CatalogProduct, Digest, Entry, EntryEvent, WatchedSource
 from release_watch.notify.cards import entry_cards, envelope, summary_card, text_card
-from release_watch.watch.rules import version_tuple
+from release_watch.watch.rules import newer_than_tracked, version_tuple
 
 STALE_WATCH = timedelta(hours=26)
 
@@ -53,7 +53,7 @@ def _link(text: str, url: str | None) -> str:
 def _behind(product, version: str | None) -> bool:
     """DocExtractor still tracks an older version than this one (or none at all)."""
     return bool(version) and not (product and product.de_version
-                                  and version_tuple(version) <= version_tuple(product.de_version))
+                                  and not newer_than_tracked(version, product.de_version))
 
 
 def _version_lines(s, events: list, sources: dict, products: dict) -> list[str]:

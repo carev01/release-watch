@@ -15,8 +15,8 @@ from release_watch.watch.compare import Changes, Known, compare, gate, page_susp
 from release_watch.watch.extract import body_hash, extract_markdown
 from release_watch.watch.readers import ReadResult, read_source
 from release_watch.watch.retire import retire_older_versions
-from release_watch.watch.rules import version_tuple
-from release_watch.watch.split import VERSION_RE
+from release_watch.watch.rules import newer_than_tracked, same_version_line, version_tuple
+from release_watch.watch.split import heading_version
 from release_watch.watch.successor import on_successor_baseline, propose_successors
 from release_watch.watch.summary import summarize
 
@@ -278,20 +278,20 @@ async def _settle_confirmed(sf, fetcher, llm, p: _Pending, second: ReadResult, a
 
 def _version_of(*texts: str) -> str | None:
     for text in texts:
-        if text and (m := VERSION_RE.search(text)):
-            return m.group(0).lstrip("vV")
+        if text and (version := heading_version(text)):
+            return version.lstrip("vV")
     return None
 
 
 async def _build_events(sf, fetcher, src, mode: str, changes: Changes) -> list[EntryEvent]:
     decided = gate(changes)
+    new = [(entry, status, reason) for kind, entry, _, status, reason in decided if kind == "new"]
     if mode == "entries":
         return [EntryEvent(id=uuid.uuid4(), source_id=src.id, kind=kind, heading=entry.heading,
                            body=entry.body, diff=readable_diff(known.body, entry.body) if known else None,
                            url=entry.url or src.url, status=status, reason=reason)
-                for kind, entry, known, status, reason in decided]
+                for kind, entry, known, status, reason in decided] + _titled_version(sf, src, new, mode)
 
-    new = [(entry, status, reason) for kind, entry, _, status, reason in decided if kind == "new"]
     if mode == "entry":  # one page per rolling release: the child is the entry, sent verbatim
         events = []
         for entry, status, reason in new:
@@ -309,7 +309,7 @@ async def _build_events(sf, fetcher, src, mode: str, changes: Changes) -> list[E
                 status, reason = "needs_look", "child_fetch_failed"
             events.append(EntryEvent(id=uuid.uuid4(), source_id=src.id, kind="new", heading=entry.heading,
                                      body=body or None, url=entry.url, status=status, reason=reason))
-        return events
+        return events + _titled_version(sf, src, new, mode)
 
     # Version lines: index pages of per-release documents, and version pages. Only the highest new version is
     # reported, and only if it is newer than every version the source already listed (an archived link added
@@ -332,6 +332,23 @@ async def _build_events(sf, fetcher, src, mode: str, changes: Changes) -> list[E
         if not (product and product.de_version and version_tuple(version) <= version_tuple(product.de_version)):
             events.append(_version_event(src, product, version, entry.url or src.url, status, reason))
     return events
+
+
+def _titled_version(sf, src, new: list, mode: str) -> list[EntryEvent]:
+    """A new release note titled with a version newer than DocExtractor tracks ("v1.19.0" while it reads the
+    1.18 docs) also gets a version line. Numbers from another scheme (a component's build) are ignored."""
+    with sf() as s:
+        product = s.get(CatalogProduct, src.product_de_id) if src.product_de_id else None
+    tracked = product.de_version if product else None
+    if not tracked:
+        return []
+    found = [(version, entry, status, reason) for entry, status, reason in new
+             if (version := _version_of(entry.heading, entry.url if mode == "entry" else ""))
+             and same_version_line(version, tracked) and newer_than_tracked(version, tracked)]
+    if not found:
+        return []
+    version, entry, status, reason = max(found, key=lambda f: version_tuple(f[0]))
+    return [_version_event(src, product, version, entry.url or src.url, status, reason)]
 
 
 def _docextractor_moved(s, row, result: ReadResult) -> None:

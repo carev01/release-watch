@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select, text
 
+from release_watch.coverage import VERDICTS, compute_coverage
 from release_watch.models import LABEL, SOURCE_STATE, CatalogProduct, Digest, EntryEvent, NewsSource, WatchedSource
 from release_watch.notify.digest import preview_digest
 from release_watch.watch.successor import watch_successor
@@ -147,6 +148,14 @@ def create_app(session_factory, web_base_url: str = "") -> FastAPI:
                 ev.status, ev.decided_at = EVENT_DECISION[decision], now
             s.commit()
         return RedirectResponse(_safe_back(back, "/needs-look"), status_code=303)
+
+    @app.get("/coverage")
+    def coverage(request: Request):
+        with session_factory() as s:
+            rows = compute_coverage(s)
+        counts = Counter(r.verdict for r in rows)
+        return templates.TemplateResponse(request, "coverage.html", {"rows": rows, "counts": counts,
+                                                                    "verdicts": VERDICTS})
 
     @app.get("/notifications")
     def notifications(request: Request):

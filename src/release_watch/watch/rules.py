@@ -35,6 +35,19 @@ def version_tuple(v: str) -> tuple[int, ...]:
     return tuple(int(n) for n in re.findall(r"\d+", v))
 
 
+def newer_than_tracked(found: str, tracked: str) -> bool:
+    """Newer at DocExtractor's precision: with "1.18" tracked, 1.18.5 is a patch of the same docs, 1.19 is not."""
+    t = version_tuple(tracked)
+    return version_tuple(found)[:len(t)] > t
+
+
+def same_version_line(found: str, tracked: str) -> bool:
+    """The number plausibly belongs to the product's release line (major within one of the tracked major), so
+    a component's "v1.2645" or OADP's own 1.6 is never compared with the OpenShift docs version 5.0."""
+    f, t = version_tuple(found), version_tuple(tracked)
+    return bool(f and t) and abs(f[0] - t[0]) <= 1
+
+
 def json_path(data, path: str) -> list:
     """Dotted path; `*` flattens a list; `name[key=value]` keeps list items whose key equals value."""
     current = [data]

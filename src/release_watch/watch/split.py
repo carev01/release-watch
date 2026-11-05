@@ -12,6 +12,13 @@ DATE_RE = re.compile(
     re.I,
 )
 VERSION_RE = re.compile(r"\bv?\d+(?:\.\d+){1,3}(?:[-.][0-9A-Za-z]+)?\b|\b\d{2}-\d\b")
+_CHAPTER = re.compile(r"^\s*\d+(?:\.\d+)*\.\s+")  # "5.2.1.1. " in numbered docs (Red Hat)
+
+
+def heading_version(heading: str) -> str | None:
+    """The version a title names, ignoring a leading chapter number."""
+    m = VERSION_RE.search(_CHAPTER.sub("", heading))
+    return m.group(0) if m else None
 
 BOLD_LEVEL = 5
 _ATX = re.compile(r"^(#{1,4})\s+(.+?)\s*#*\s*$")

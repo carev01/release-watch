@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Version coverage</h1>
+<p class="muted">For each DocExtractor product: would Release Watch notice when a version newer than the one
+DocExtractor tracks comes out? Products whose docs are pinned to a version need a watched page that shows its
+versions. Login-walled and inactive sources don't count.</p>
+<p>{% for key in verdicts %}{% if counts[key] %}<a href="#{{ key }}">{{ counts[key] }} {{ key | replace("_", " ") }}</a>{% if not loop.last %} · {% endif %}{% endif %}{% endfor %}</p>
+{% for key, explanation in verdicts.items() %}{% set group = rows | selectattr("verdict", "equalto", key) | list %}{% if group %}
+<h2 id="{{ key }}">{{ key | replace("_", " ") | capitalize }} ({{ group | length }})</h2>
+<p class="muted">{{ explanation }}</p>
+{% if key == "evergreen" %}<details><summary>Show the {{ group | length }} products</summary>{% endif %}
+<table>
+<tr><th>Vendor · Product</th><th>DocExtractor tracks</th><th>Newest seen</th><th>Watched pages that show versions</th></tr>
+{% for r in group %}
+<tr>
+  <td>{{ r.vendor }} · {{ r.product }}</td>
+  <td>{{ r.tracked or "—" }}{% if not r.tracked and r.url_version %} <span class="muted">(URLs say {{ r.url_version }})</span>{% endif %}</td>
+  <td>{{ r.newest or "—" }}</td>
+  <td>{% for sig in r.signals %}<div><span class="pill">{{ sig.how }}</span> newest {{ sig.newest }} · <a class="url" href="{{ sig.url | web_url }}" rel="noreferrer">{{ sig.url }}</a></div>{% else %}<span class="muted">none</span>{% endfor %}</td>
+</tr>
+{% endfor %}
+</table>
+{% if key == "evergreen" %}</details>{% endif %}
+{% endif %}{% endfor %}
+{% endblock %}

@@ -403,3 +403,35 @@ async def test_watch_retires_the_older_version_page(session_factory):
     with session_factory() as s:
         assert (s.get(WatchedSource, old_id).state, s.get(WatchedSource, old_id).superseded_by) == ("superseded",
                                                                                                     new_id)
+
+
+def versioned_product(sf, version):
+    pid = uuid.uuid4()
+    with sf() as s:
+        s.add(CatalogProduct(de_id=pid, vendor_de_id=uuid.uuid4(), name="Velero", de_version=version, synced_at=NOW_DT))
+        s.commit()
+    return pid
+
+
+async def test_release_note_titled_with_a_newer_version_also_sends_a_version_line(session_factory):
+    pid = versioned_product(session_factory, "1.18")
+    add_source(session_factory, product_de_id=pid)
+    base = "<h2>v1.18.3</h2><p>Fixes.</p>"
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, base)}), now=later(0))
+    patch = "<h2>v1.18.4</h2><p>More fixes.</p>" + base
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, patch)}), now=later(24))
+    assert [e.kind for e in events(session_factory)] == ["new"]  # a patch of the docs DocExtractor reads
+    minor = "<h2>v1.19.0</h2><p>Features.</p>" + patch
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, minor)}), now=later(48))
+    version = [e for e in events(session_factory) if e.kind == "version"]
+    assert [(e.version, e.status) for e in version] == [("1.19.0", "queued")]
+
+
+async def test_release_note_numbers_from_another_scheme_send_no_version_line(session_factory):
+    pid = versioned_product(session_factory, "11.46")
+    add_source(session_factory, product_de_id=pid)
+    base = "<h2>Satori v1.2644</h2><p>Fixes.</p>"
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, base)}), now=later(0))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, "<h2>Satori v1.2645</h2><p>New.</p>" + base)}),
+              now=later(24))
+    assert [e.kind for e in events(session_factory)] == ["new"]

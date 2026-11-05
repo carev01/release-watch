@@ -95,3 +95,10 @@ Text B.
     assert [e.heading for e in entries] == ["September 30, 2026", "September 22, 2026"]
     assert "Text A." in entries[0].body and "Text B." not in entries[0].body
     assert entries[1].body.endswith("Text B.")
+
+
+def test_heading_version_skips_chapter_numbers():
+    from release_watch.watch.split import heading_version
+    assert heading_version("5.2.1.1. OADP 1.6.2 release notes") == "1.6.2"
+    assert heading_version("5.13.1.2. Install the Data Protection Application") is None
+    assert heading_version("10.4 release notes") == "10.4" and heading_version("v1.19.0") == "v1.19.0"
