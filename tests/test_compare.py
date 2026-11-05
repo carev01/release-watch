@@ -109,3 +109,12 @@ def test_readable_diff_ignores_page_chrome():
     old = "* Fix A.\n\nLast updated 20 days ago"
     new = "* Fix A.\n* Fix B.\n\nLast updated 21 days ago"
     assert readable_diff(old, new) == "**Added**\n- Fix B."
+
+
+def test_readable_diff_keeps_leading_punctuation_outside_the_bold():
+    old = "## October 23, 2026\n\n#### Singapore AWS and GCP data plane regions\n\nEarly Access is opt-in and " \
+          "initially available on the US West, US East, and Australia control planes. To enable it, contact " \
+          "[Clumio Support](mailto:support@clumio.com)."
+    new = old.replace("US East, and", "US East, Europe, Canada, and")
+    diff = readable_diff(old, new)
+    assert "US East, **Europe, Canada**, and Australia" in diff

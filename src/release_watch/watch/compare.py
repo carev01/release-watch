@@ -84,10 +84,11 @@ def _comparable(body: str) -> str:
 
 
 def _marked(tokens: list[str], before: str, after: str) -> str:
-    """Wrap a run of changed words, keeping the spaces around it outside the markers."""
+    """Wrap a run of changed words, keeping the spaces (and a leading comma or the like) outside the markers."""
     text = "".join(tokens)
-    core = text.strip()
-    return text[:len(text) - len(text.lstrip())] + before + core + after + text[len(text.rstrip()):] if core else text
+    lead = re.match(r"[\s,;:.]*", text).group(0)
+    core = text[len(lead):].rstrip()
+    return lead + before + core + after + text[len(lead) + len(core):] if core else text
 
 
 def _changed_line(old: str, new: str) -> str:
