@@ -1430,3 +1430,49 @@ source_config:
 # 4 versions, newest "11.46" (2024e skipped)
 - url: "https://documentation.commvault.com/11.46/software/header.html"
   follow: {"pick": {"type": "versions", "raw": true, "regex": "data-redirect-version=\"(\\d+\\.\\d+)\""}}
+
+# --- AvePoint Learn (weekly login visit; tuned from the first visit's snapshots, 2026-11-05) ---
+# Each page is one release summary under a single H1 ("What's New in this Release?"); the site menu sits above
+# it and has no selector, so the entry starts at the H1: one entry per page, a new release arrives as an edit.
+- url: "https://learn.avepoint.com/aos-release-notes/new-features-and-improvements.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/avepoint-opus/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/cense/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/cloud-governance-administrator-guide/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/cloud-governance-portal-user-guide/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/cloud-management/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/confide-administrator-guide-v2/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/confide-administrator-guide/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/dynamics365/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/elements-user-guide/baseline-management/view-change-logs.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/elements-user-guide/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/fly-user-guide/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/google-backup/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/iaas-paas/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/insights/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/m365/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/myhub-administrator-guide/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/policies-for-microsoft-365/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/saas-apps/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/salesforce/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/tygraph/whats-new-in-this-release.html"
+  split_rule: {"heading_level": 1}
