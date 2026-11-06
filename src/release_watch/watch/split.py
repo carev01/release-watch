@@ -111,8 +111,10 @@ def split_entries(markdown: str, rule: dict | None = None) -> list[Entry]:
 
     entries: list[Entry] = []
     seen: dict[str, int] = {}
+    # to_next_match: an entry runs to the next matching heading, keeping same-level sections inside it.
+    bounds = starts if rule.get("to_next_match") else heads
     for idx, lvl, text in starts:
-        end = next((j for j, l2, _ in heads if j > idx and l2 <= lvl), len(lines))
+        end = next((j for j, l2, _ in bounds if j > idx and l2 <= lvl), len(lines))
         key = entry_key(text)
         seen[key] = seen.get(key, 0) + 1
         if seen[key] > 1:

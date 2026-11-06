@@ -55,6 +55,16 @@ def test_heading_regex_override():
     assert [e.key for e in entries] == ["11.48", "11.46", "11.44"]
 
 
+def test_heading_regex_to_next_match_keeps_same_level_sections_in_the_entry():
+    # Securiti Integrations: each "## 1.153" has its own "## Monitored Data Systems" and "## IaaS Connectors".
+    page = ("## 1.153\n\n## Monitored Data Systems\n\n* New connector.\n\n## IaaS Connectors\n\n* Fix.\n\n"
+            "## 1.152\n\n## Monitored Data Systems\n\n* Older.\n")
+    entries = split_entries(page, {"heading_regex": r"^\d+\.\d+$", "to_next_match": True})
+    assert [e.key for e in entries] == ["1.153", "1.152"]
+    assert "New connector." in entries[0].body and "Fix." in entries[0].body and "Older." not in entries[0].body
+    assert entries[1].body.endswith("* Older.")
+
+
 def test_entry_key_strips_markup():
     assert entry_key("**Oct 2026**") == "oct 2026"
 

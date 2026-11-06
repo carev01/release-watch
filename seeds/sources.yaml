@@ -1476,3 +1476,30 @@ source_config:
   split_rule: {"heading_level": 1}
 - url: "https://learn.avepoint.com/tygraph/whats-new-in-this-release.html"
   split_rule: {"heading_level": 1}
+# --- Securiti Help Center (weekly login visit; tuned from the first visit's snapshots, 2026-11-06) ---
+# Most product pages split at their "## 1.153" version headings on their own; these 8 put "### Release updates -
+# <month>" under each version, which split into look-alike entries. Pinned to the version heading instead.
+- url: "https://helpcenter.securiti.ai/docs/assessments-release-notes"
+  split_rule: {"heading_level": 2}
+- url: "https://helpcenter.securiti.ai/docs/data-subject-rights-release-notes"
+  split_rule: {"heading_level": 2}
+- url: "https://helpcenter.securiti.ai/docs/enterprise-data-catalog-release-notes"
+  split_rule: {"heading_level": 2}
+- url: "https://helpcenter.securiti.ai/docs/hyperdrive-release-notes"
+  split_rule: {"heading_level": 2}
+- url: "https://helpcenter.securiti.ai/docs/pods-release-notes"
+  split_rule: {"heading_level": 2}
+- url: "https://helpcenter.securiti.ai/docs/sensitive-data-intelligence-release-notes"
+  split_rule: {"heading_level": 2}
+- url: "https://helpcenter.securiti.ai/docs/workflows-release-notes"
+  split_rule: {"heading_level": 2}
+# 5 entries, 1.153 to 1.149: each version also has "## Monitored Data Systems" / "## IaaS Connectors" sections,
+# kept inside the version's entry
+- url: "https://helpcenter.securiti.ai/docs/integrations-release-notes"
+  split_rule: {"heading_regex": "^\\d+\\.\\d+$", "to_next_match": true}
+# The help center's menu is on every page: only the release links count. 20 links, "What's New in 1.153" to 1.134
+- url: "https://helpcenter.securiti.ai/docs/what-s-new-in-1-152"
+  follow: {"pick": {"type": "links", "text_regex": "^What's New in \\d+\\.\\d+$"}}
+# The product release-notes links; a new one is a page to look at
+- url: "https://helpcenter.securiti.ai/docs/hyperdrive-release-notes-1"
+  follow: {"pick": {"type": "links", "text_regex": "release notes$"}}
