@@ -58,6 +58,19 @@ def test_weekly_login_line_per_vendor(session_factory):
     assert h.public_only == ["Rubrik", "Cohesity"]
 
 
+def test_weekly_login_one_vendor_rerun_keeps_the_other_vendors_result(session_factory):
+    # watch-login --vendor Securiti after the full visit: AvePoint's result still shows, Securiti's is the rerun's.
+    with session_factory() as s:
+        login_run(s, datetime(2026, 11, 2, 9, 30, tzinfo=UTC), {"vendors": {
+            "AvePoint": {"login": "ok", "sources": 26, "read": 26},
+            "Securiti": {"login": "failed", "reason": "stopped at help pane", "sources": 29, "read": 0}}})
+        login_run(s, datetime(2026, 11, 3, 2, 15, tzinfo=UTC), {"vendors": {
+            "Securiti": {"login": "ok", "sources": 29, "read": 26}}})
+        s.commit()
+        h = compute_health(s, NOW)
+    assert h.weekly_login == "Weekly login: AvePoint 26 of 26 read Mon 02 Nov, Securiti 26 of 29 read Tue 03 Nov"
+
+
 def test_weekly_login_stale_after_eight_days(session_factory):
     with session_factory() as s:
         login_run(s, datetime(2026, 10, 26, 9, 30, tzinfo=UTC), {"vendors": {

@@ -56,8 +56,17 @@ def _weekly_login(s, now: datetime) -> str:
         return f"Weekly login: visit in progress (started {run.started_at:%a %d %b %H:%M} UTC)"
     if run.status == "failed":
         return f"Weekly login: the visit on {day} failed"
+    # Each vendor's latest result: a one-vendor rerun (watch-login --vendor) keeps the others' from the full visit.
+    latest: dict[str, tuple[datetime, dict]] = {}
+    recent = s.scalars(select(JobRun).where(JobRun.job == "watch-login", JobRun.status == "ok",
+                                            JobRun.started_at >= now - LOGIN_VISIT_STALE)
+                       .order_by(JobRun.started_at.desc()))
+    for r in recent:
+        for name, v in ((r.counts or {}).get("vendors") or {}).items():
+            latest.setdefault(name, (r.started_at, v))
     parts = []
-    for name, v in ((run.counts or {}).get("vendors") or {}).items():
+    for name, (started, v) in sorted(latest.items()):
+        day = f"{started:%a %d %b}"
         if v.get("login") == "ok" and not v.get("reason"):
             parts.append(f"{name} {v.get('read', 0)} of {v.get('sources', 0)} read {day}")
         elif v.get("login") == "ok":
