@@ -525,3 +525,75 @@ async def test_login_run_404_is_not_read_and_never_gone(session_factory):
     with session_factory() as s:
         assert s.get(WatchedSource, sid).state == "active"
     assert counts["gone"] == 0 and counts["error"] == 1 and events(session_factory) == []
+
+
+LINA_FOLLOW = {"mode": "entry", "pick": {"type": "links", "href_regex": r"/rn/lina-"}}
+
+
+def lina_list(*versions):
+    return "".join(f'<a href="/rn/lina-{v}">Lina {v}</a>' for v in versions)
+
+
+def lina_page(version, text):
+    return html_page(f"https://x.com/rn/lina-{version}", f"<h1>Lina {version}</h1><p>{text}</p>")
+
+
+async def test_index_entry_mode_burst_sends_only_the_newest_release(session_factory):
+    # Atempo split "Lina 7.4" into one page per service pack: three links appeared at once.
+    add_source(session_factory, kind="index_page", follow=LINA_FOLLOW)
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, lina_list("7.4"))}), now=later(0))
+    fetcher = ScriptedFetcher({URL: html_page(URL, lina_list("7.4.2", "7.4.1", "7.4.0")),
+                               "https://x.com/rn/lina-7.4.2": lina_page("7.4.2", "Agent fix.")})
+    await run(session_factory, fetcher, now=later(24))
+    by_heading = {ev.heading: (ev.status, ev.reason) for ev in events(session_factory)}
+    assert by_heading == {"Lina 7.4.2": ("queued", None), "Lina 7.4.1": ("dismissed", "older_release"),
+                          "Lina 7.4.0": ("dismissed", "older_release")}
+    assert "https://x.com/rn/lina-7.4.1" not in fetcher.calls
+
+
+async def test_latest_release_page_additions_arrive_as_an_edit(session_factory):
+    add_source(session_factory, kind="index_page", follow=LINA_FOLLOW)
+    child = "https://x.com/rn/lina-7.4.2"
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, lina_list("7.4.1"))}), now=later(0))
+    listed = html_page(URL, lina_list("7.4.2", "7.4.1"))
+    await run(session_factory, ScriptedFetcher({URL: listed, child: lina_page("7.4.2", "To be completed.")}),
+              now=later(24))
+    filled = lina_page("7.4.2", "Agent fix.")
+    await run(session_factory, ScriptedFetcher({URL: listed, child: filled}), now=later(48))  # first sighting: held
+    assert [ev.kind for ev in events(session_factory)] == ["new"]
+    fetcher = ScriptedFetcher({URL: listed, child: filled})
+    await run(session_factory, fetcher, now=later(72))
+    assert "https://x.com/rn/lina-7.4.1" not in fetcher.calls  # older release pages are left alone
+    new, edit = events(session_factory)
+    assert (edit.kind, edit.status, edit.heading, edit.url) == ("edited", "queued", "Lina 7.4.2", child)
+    assert "Agent fix." in edit.diff and edit.summary == "Adds X."
+    await run(session_factory, ScriptedFetcher({URL: listed, child: filled}), now=later(96))
+    assert len(events(session_factory)) == 2
+
+
+async def test_latest_release_page_is_picked_up_for_a_list_already_watched(session_factory):
+    # Sources watched before this existed: the newest listed page is read once as a baseline, without a card.
+    add_source(session_factory, kind="index_page", follow=LINA_FOLLOW)
+    child = "https://x.com/rn/lina-7.4.2"
+    listed = html_page(URL, lina_list("7.4.1", "7.4.2"))
+    await run(session_factory, ScriptedFetcher({URL: listed, child: lina_page("7.4.2", "To be completed.")}),
+              now=later(0))
+    for hours in (24, 48):
+        await run(session_factory, ScriptedFetcher({URL: listed, child: lina_page("7.4.2", "Agent fix.")}),
+                  now=later(hours))
+    [edit] = events(session_factory)
+    assert edit.kind == "edited" and "Agent fix." in edit.diff
+
+
+async def test_index_entry_mode_burst_keeps_releases_of_different_products(session_factory):
+    # Datto lists UniView and Endpoint Backup together: a higher UniView number doesn't make Endpoint old news.
+    follow = {"mode": "entry", "pick": {"type": "links", "href_regex": r"/rn/"}}
+    add_source(session_factory, kind="index_page", follow=follow)
+    old = '<a href="/rn/uv-2.111">UniView 2.111-1 – July 2, 2026</a>'
+    new = ('<a href="/rn/ep-1.15.19">Endpoint Backup v1.15.19 – November 5, 2026</a>'
+           '<a href="/rn/uv-2.112">UniView 2.112-2 – August 27, 2026</a>')
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, old)}), now=later(0))
+    pages = {f"https://x.com/rn/{p}": html_page(f"https://x.com/rn/{p}", f"<h1>{p}</h1><p>Notes {p}.</p>")
+             for p in ("ep-1.15.19", "uv-2.112")}
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, new + old), **pages}), now=later(24))
+    assert sorted(ev.status for ev in events(session_factory)) == ["queued", "queued"]

@@ -93,6 +93,9 @@ class WatchedSource(Timestamps, Base):
     superseded_by: Mapped[uuid.UUID | None] = mapped_column(UUID)
     suspect_streak: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # A release list read one page per release: its newest page, reread daily for additions
+    # ({url, parts, heading, text, hash, pending_hash, pending_since}).
+    latest_page: Mapped[dict | None] = mapped_column(JSONB)
 
     __table_args__ = (
         Index(

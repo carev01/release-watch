@@ -15,7 +15,8 @@ from release_watch.watch.extract import body_hash, extract_markdown
 from release_watch.watch.readers import ReadResult, read_source
 from release_watch.watch.retire import retire_older_versions
 from release_watch.watch.rules import newer_than_tracked, same_version_line, version_tuple
-from release_watch.watch.split import heading_version, own_release
+from release_watch.watch.split import DATE_RE, heading_version, own_release
+from release_watch.watch.split import Entry as SplitEntry
 from release_watch.watch.successor import on_successor_baseline, propose_successors
 from release_watch.watch.summary import summarize
 
@@ -42,6 +43,7 @@ class _Pending:
     result: ReadResult
     changes: Changes
     events: list = field(default_factory=list)
+    followed: bool = False  # its newest release page was just stored
 
 
 def _load_state(s, source_id) -> _State:
@@ -139,6 +141,14 @@ async def run_watch(session_factory, fetcher, llm, *, confirm_delay: float, now:
                                         same_visit_edits=same_visit_edits)
             except Exception as exc:
                 _record_crash(session_factory, p.source, exc, counts)
+    followed = {p.source.id for p in pending if p.followed}
+    for src, result in zip(sources, results):
+        if _mode(src) == "entry" and result.outcome == "ok" and src.id not in followed:
+            try:
+                await _follow_latest(session_factory, fetcher, llm, src, result.entries, now(), counts,
+                                     same_visit_edits=same_visit_edits)
+            except Exception as exc:
+                _record_crash(session_factory, src, exc, counts)
     if login_run:  # successors and retirement are the daily watch's business
         return counts
     counts["successors"] = await propose_successors(session_factory, fetcher, now())
@@ -286,10 +296,98 @@ async def _settle_confirmed(sf, fetcher, llm, p: _Pending, second: ReadResult, a
                 continue
             s.add(ev)
             counts["events_queued" if ev.status == "queued" else "events_needs_look"] += 1
+        if mode == "entry" and changes.new:  # the newest release page is the one followed from now on
+            newest = _newest(to_send.new)
+            sent = next((ev for ev in events if ev.kind == "new" and ev.url == newest.url and ev.body), None)
+            row.latest_page = _page_state(newest, sent.body) if sent else None
+            p.followed = True
         sending = bool(changes.new or fire)
         _attempt(s, row, "changed" if sending else "same", second, None if sending else "edit held for a day")
         s.commit()
     counts["changed" if sending else "same"] += 1
+
+
+def _line(heading: str) -> str:
+    """A release title without its version and date: "Lina 7.4.2" and "Lina 7.4.1" share a line, a list's
+    "UniView 2.112-2" and "Endpoint Backup v1.15.19" don't."""
+    text = DATE_RE.sub("", heading)
+    if version := heading_version(text):
+        text = text.replace(version, "")
+    return " ".join(text.split()).casefold()
+
+
+def _superseded(entries: list) -> list:
+    """Entries with a newer release of their own line among these."""
+    def version(e):
+        return version_tuple(_version_of(e.heading) or "")
+    return [e for e in entries if version(e) and any(
+        o is not e and _line(o.heading) == _line(e.heading) and version(o) > version(e) for o in entries)]
+
+
+def _newest(entries: list):
+    """The newest release page among these, in list order: the first one no other release of its line beats."""
+    older = _superseded(entries)
+    return next((e for e in entries if e not in older), None)
+
+
+async def _release_text(fetcher, src, entry) -> str:
+    """A release page's own notes (its sub-pages joined), without older releases it repeats; "" if unread."""
+    bodies = []
+    for page_url in (entry.url, *entry.parts):
+        child = await fetcher.fetch(page_url)
+        text = extract_markdown(child.text, page_url, (src.follow or {}).get("child_selector")) \
+            if child.outcome == "ok" else ""
+        if not text:
+            return ""
+        bodies.append(text)
+    return own_release("\n\n".join(bodies), entry.heading)
+
+
+def _page_state(entry, text: str) -> dict:
+    return {"url": entry.url, "parts": list(entry.parts), "heading": entry.heading, "text": text,
+            "hash": body_hash(text), "pending_hash": None, "pending_since": None}
+
+
+async def _follow_latest(sf, fetcher, llm, src, entries: list, at: datetime, counts, *,
+                         same_visit_edits: bool = False) -> None:
+    """Reread a release list's newest page: what the vendor adds to it later (a "To be completed" section
+    filled in) is sent as an edit, held for a second daily sighting like any edit. Older pages are left alone."""
+    with sf() as s:
+        page = s.get(WatchedSource, src.id).latest_page
+    if page is None:  # a list watched before pages were followed: the page that appeared last is the baseline
+        with sf() as s:
+            last = s.scalar(select(func.max(Entry.first_seen)).where(Entry.source_id == src.id))
+            keys = set(s.scalars(select(Entry.key).where(Entry.source_id == src.id, Entry.first_seen == last)))
+        newest = _newest([e for e in entries if e.key in keys] or entries)
+        text = await _release_text(fetcher, src, newest) if newest else ""
+        if text:
+            with sf() as s:
+                s.get(WatchedSource, src.id).latest_page = _page_state(newest, text)
+                s.commit()
+        return
+    entry = SplitEntry(key=page["url"], heading=page["heading"], body="", url=page["url"], parts=tuple(page["parts"]))
+    text = await _release_text(fetcher, src, entry)
+    if not text:
+        return
+    h = body_hash(text)
+    since = datetime.fromisoformat(page["pending_since"]) if page.get("pending_since") else None
+    event = None
+    if h == page["hash"]:
+        page = page | {"pending_hash": None, "pending_since": None}
+    elif same_visit_edits or (page.get("pending_hash") == h and since and at - since >= EDIT_HOLD):
+        diff = readable_diff(page["text"], text)
+        event = EntryEvent(id=uuid.uuid4(), source_id=src.id, kind="edited", heading=page["heading"], body=text,
+                           diff=diff, url=page["url"], status="queued",
+                           summary=await summarize(llm, src.vendor_name, page["heading"], diff))
+        page = _page_state(entry, text)
+    elif page.get("pending_hash") != h:
+        page = page | {"pending_hash": h, "pending_since": at.isoformat()}
+    with sf() as s:
+        s.get(WatchedSource, src.id).latest_page = page
+        if event:
+            s.add(event)
+            counts["events_queued"] += 1
+        s.commit()
 
 
 def _version_of(*texts: str) -> str | None:
@@ -309,18 +407,16 @@ async def _build_events(sf, fetcher, src, mode: str, changes: Changes) -> list[E
                 for kind, entry, known, status, reason in decided] + _titled_version(sf, src, new, mode)
 
     if mode == "entry":  # one page per rolling release: the child is the entry, sent verbatim
+        # Several pages of one release line at once (a vendor splitting one page per service pack): only the
+        # newest of the line is news; the others are logged, unsent.
+        older = _superseded([entry for entry, _, _ in new])
         events = []
         for entry, status, reason in new:
-            bodies = []
-            for page_url in (entry.url, *entry.parts):
-                child = await fetcher.fetch(page_url)
-                text = extract_markdown(child.text, page_url, (src.follow or {}).get("child_selector")) \
-                    if child.outcome == "ok" else ""
-                if not text:
-                    bodies = []
-                    break
-                bodies.append(text)
-            body = own_release("\n\n".join(bodies), entry.heading)  # cumulative pages repeat older releases
+            if entry in older:
+                events.append(EntryEvent(id=uuid.uuid4(), source_id=src.id, kind="new", heading=entry.heading,
+                                         url=entry.url, status="dismissed", reason="older_release"))
+                continue
+            body = await _release_text(fetcher, src, entry)
             if not body:
                 status, reason = "needs_look", "child_fetch_failed"
             events.append(EntryEvent(id=uuid.uuid4(), source_id=src.id, kind="new", heading=entry.heading,
