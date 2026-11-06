@@ -27,10 +27,11 @@ _HELPERS = r"""
   };
   const leaf = async (p, test) => {
     const h = await p.evaluateHandle(t => [...document.querySelectorAll('body *')].find(e =>
-      e.childElementCount === 0 && e.innerText && (t.exact ? e.innerText.trim() === t.text
-                                                            : e.innerText.trim().startsWith(t.text))), test);
+      e.childElementCount === 0 && e.getClientRects().length > 0 && e.innerText &&
+      (t.exact ? e.innerText.trim() === t.text : e.innerText.trim().startsWith(t.text))), test);
     return h.asElement();
   };
+  const click = async (p, selector) => { const el = await p.$(selector); if (!el) return false; await el.click(); return true; };
   await page.setUserAgent(context.ua);
   await page.setViewport({ width: 1440, height: 900 });
 """
@@ -48,7 +49,7 @@ export default async function ({ page, context }) {
   await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }).catch(() => {}),
                      page.keyboard.press('Enter')]);
   await sleep(5000);
-  if (!page.url().startsWith('https://learn.avepoint.com')) return stop('signed in');
+  if (!page.url().startsWith('https://learn.avepoint.com/') || /\/login/.test(page.url())) return stop('signed in');
   return await done(page);
 }
 """
@@ -62,7 +63,7 @@ export default async function ({ page, context }) {
   await sleep(3000);
   if (!(await page.$('#email'))) return stop('login form');
   await page.type('#email', context.user, { delay: 40 });
-  await (await page.$('button[type=submit]')).click();
+  if (!(await click(page, 'button[type=submit]'))) return stop('continue button');
   await sleep(6000);
   const dropdown = await leaf(page, { text: 'Select Domain', exact: true });
   if (!dropdown) return stop('domain drop-down');
@@ -72,7 +73,7 @@ export default async function ({ page, context }) {
   if (!org) return stop('domain option');
   await org.click();
   await sleep(1500);
-  await (await page.$('button[type=submit]')).click();
+  if (!(await click(page, 'button[type=submit]'))) return stop('continue button');
   await sleep(6000);
   const pw = await page.$('input[type=password]');
   if (!pw) return stop('password field');
@@ -81,26 +82,26 @@ export default async function ({ page, context }) {
   for (let i = 0; i < 20 && page.url().includes('#/login'); i++) await sleep(1000);
   if (page.url().includes('#/login')) return stop('signed in');
   await sleep(5000);
-  const help = await page.$('button[aria-label="Help Center"]');
-  if (!help) return stop('help center button');
-  await help.click();
-  await sleep(5000);
-  // The help window, not a worker or another background target that may appear first.
-  const opened = page.browser().waitForTarget(t => t.type() === 'page' && t !== page.target(),
-                                              { timeout: 20000 }).then(t => t.page()).catch(() => null);
-  let clicked = false;
-  for (const frame of page.frames()) {
-    const h = await frame.evaluateHandle(() => [...document.querySelectorAll('a, button, [role=button]')].find(e =>
-      /open in new|new window|new tab|open_in_new/i.test(
-        [e.getAttribute('title'), e.getAttribute('aria-label'), e.innerText].join(' ')))).catch(() => null);
-    const el = h && h.asElement();
-    if (el) { await el.click(); clicked = true; break; }
+  // A "Help Center" button opens a menu with "Documentation", which opens the signed-in help center in a new
+  // window (2026-11-05: the sidebar "?"; the top-right "?" opens a pane instead). Try each button in turn.
+  const helps = await page.$$('button[aria-label="Help Center"]');
+  if (!helps.length) return stop('help center button');
+  let docs = null;
+  for (const h of helps) {
+    await h.click().catch(() => {});
+    await sleep(3000);
+    docs = await leaf(page, { text: 'Documentation', exact: true });
+    if (docs) break;
+    await page.keyboard.press('Escape');
+    await sleep(1000);
   }
-  if (!clicked) await page.mouse.click(1410, 155);  // where the icon sat at 1440x900 in the trial
+  if (!docs) return stop('help center menu');
+  // Matched by address: the browser already holds other pages (about:blank, Browserless' own).
+  const opened = page.browser().waitForTarget(t => t.type() === 'page' &&
+      t.url().startsWith('https://helpcenter.securiti.ai/'), { timeout: 30000 }).then(t => t.page()).catch(() => null);
+  await docs.click();
   const win = await opened;
   if (!win) return stop('help center window');
-  for (let i = 0; i < 20 && !win.url().startsWith('https://helpcenter.securiti.ai/'); i++) await sleep(1000);
-  if (!win.url().startsWith('https://helpcenter.securiti.ai/')) return stop('help center window');
   await sleep(5000);
   return await done(win);
 }

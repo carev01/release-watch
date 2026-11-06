@@ -152,3 +152,11 @@ def test_total_excludes_sources_accepted_after_the_watch_started(session_factory
         s.commit()
         h = compute_health(s, NOW)
     assert (h.checked, h.total) == (1, 1)
+
+
+def test_weekly_login_in_progress(session_factory):
+    with session_factory() as s:
+        s.add(JobRun(job="watch-login", started_at=NOW - timedelta(minutes=5), status="running", counts={}))
+        s.commit()
+        h = compute_health(s, NOW)
+    assert h.weekly_login == "Weekly login: visit in progress (started Wed 04 Nov 07:55 UTC)"

@@ -52,6 +52,8 @@ def _weekly_login(s, now: datetime) -> str:
     day = f"{run.started_at:%a %d %b}"
     if now - run.started_at > LOGIN_VISIT_STALE:
         return f"Weekly login: no visit since {day}"
+    if run.status == "running":
+        return f"Weekly login: visit in progress (started {run.started_at:%a %d %b %H:%M} UTC)"
     if run.status == "failed":
         return f"Weekly login: the visit on {day} failed"
     parts = []
