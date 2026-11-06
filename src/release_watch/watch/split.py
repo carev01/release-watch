@@ -121,3 +121,18 @@ def split_entries(markdown: str, rule: dict | None = None) -> list[Entry]:
             key = f"{key} ({seen[key]})"
         entries.append(Entry(key=key, heading=text, body="\n".join(lines[idx:end]).strip()))
     return entries
+
+
+def own_release(markdown: str, heading: str) -> str:
+    """A release page cut before the older releases it repeats underneath ("Lina 7.4.2" carries "Lina 7.4.1"):
+    the cut is at the first heading that reads like this one with only the version changed."""
+    version = heading_version(heading)
+    if not version:
+        return markdown
+    shape = _clean_heading(heading).replace(version, "\0").casefold()
+    lines = markdown.splitlines()
+    for i, level, text in _headings(lines):
+        other = heading_version(text)
+        if i and other and other != version and text.replace(other, "\0").casefold() == shape:
+            return "\n".join(lines[:i]).strip()
+    return markdown

@@ -5,6 +5,7 @@ from datetime import datetime
 
 PART_LIMIT = 20_000
 MAX_PARTS = 3
+PREVIEW_LIMIT = 1_500  # a longer entry shows this much; the rest opens with "Show full notes"
 LIST_CAP = 15
 _HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
 _TABLE_SEP = re.compile(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$")
@@ -55,12 +56,25 @@ def _text(text: str, **kw) -> dict:
     return {"type": "TextBlock", "text": text, "wrap": True, **kw}
 
 
-def _card(blocks: list[dict], url: str | None = None) -> dict:
+def _card(blocks: list[dict], url: str | None = None, actions: list[dict] = ()) -> dict:
     card = {"type": "AdaptiveCard", "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
             "version": "1.4", "msteams": {"width": "Full"}, "body": blocks}
-    if url:
-        card["actions"] = [{"type": "Action.OpenUrl", "title": "Open page", "url": url}]
+    actions = [*actions, *([{"type": "Action.OpenUrl", "title": "Open page", "url": url}] if url else [])]
+    if actions:
+        card["actions"] = actions
     return card
+
+
+def _folded(text: str) -> tuple[list[dict], list[dict]]:
+    """(blocks, actions): a long text shows its first paragraphs; the rest sits in a hidden container that the
+    "Show full notes" button toggles."""
+    preview = split_parts(text, PREVIEW_LIMIT)[0]
+    rest = text[len(preview):].strip()
+    if not rest:
+        return [_text(text)], []
+    fold = {"type": "Container", "id": "full-notes", "isVisible": False, "items": [_text(rest)]}
+    toggle = {"type": "Action.ToggleVisibility", "title": "Show full notes", "targetElements": ["full-notes"]}
+    return [_text(preview), fold], [toggle]
 
 
 def entry_cards(event, vendor: str, product: str | None, web_base_url: str) -> list[dict]:
@@ -71,13 +85,15 @@ def entry_cards(event, vendor: str, product: str | None, web_base_url: str) -> l
     summary = [_text(f"_{event.summary}_", isSubtle=True)] if event.summary else []
 
     if len(parts) > MAX_PARTS:
-        return [_card([_text(f"**{title} (1 of {len(parts)} parts)**"), *summary, _text(parts[0]),
-                       _text(f"Full entry: {web_base_url}/events/{event.id}")], event.url)]
+        blocks, actions = _folded(parts[0])
+        return [_card([_text(f"**{title} (1 of {len(parts)} parts)**"), *summary, *blocks,
+                       _text(f"Full entry: {web_base_url}/events/{event.id}")], event.url, actions)]
     cards = []
     for i, part in enumerate(parts, 1):
         suffix = f" ({i}/{len(parts)})" if len(parts) > 1 else ""
-        cards.append(_card([_text(f"**{title}{suffix}**"), *(summary if i == 1 else []), _text(part)],
-                           event.url))
+        blocks, actions = _folded(part)
+        cards.append(_card([_text(f"**{title}{suffix}**"), *(summary if i == 1 else []), *blocks],
+                           event.url, actions))
     return cards
 
 

@@ -19,8 +19,18 @@ def markdown_html(text: str | None) -> Markup:
     return Markup(_md.render(text or ""))
 
 
+def _element(block: dict) -> str:
+    if block.get("type") == "TextBlock":
+        return _block(block)
+    if block.get("type") == "Container":  # folded notes: Teams' "Show full notes" toggle
+        inner = "".join(_element(b) for b in block.get("items", []))
+        return f"<details><summary>Show full notes</summary>{inner}</details>" if block.get("isVisible") is False \
+            else inner
+    return ""
+
+
 def card_html(card: dict) -> Markup:
-    body = "".join(_block(b) for b in card.get("body", []) if b.get("type") == "TextBlock")
+    body = "".join(_element(b) for b in card.get("body", []))
     actions = "".join(
         f'<a class="action" href="{escape(a["url"])}" rel="noreferrer">{escape(a.get("title", "Open"))}</a>'
         for a in card.get("actions", []) if str(a.get("url", "")).startswith(("http://", "https://")))

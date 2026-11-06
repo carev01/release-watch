@@ -5,7 +5,14 @@ from datetime import UTC, datetime
 
 from release_watch.health import Health
 from release_watch.models import EntryEvent
-from release_watch.notify.cards import card_markdown, entry_cards, envelope, split_parts, summary_card
+from release_watch.notify.cards import (
+    PREVIEW_LIMIT,
+    card_markdown,
+    entry_cards,
+    envelope,
+    split_parts,
+    summary_card,
+)
 
 NOW = datetime(2026, 11, 4, 8, tzinfo=UTC)
 WEB = "http://rw.lan"
@@ -45,7 +52,7 @@ def test_entry_cards_numbered_parts():
     assert len(cards) == 3
     assert [c["body"][0]["text"] for c in cards] == [f"**Vendor · Product: October 2026 ({i}/3)**" for i in (1, 2, 3)]
     assert "Adds X." in card_text(cards[0]) and "Adds X." not in card_text(cards[1])
-    assert cards[0]["actions"][0]["url"] == "https://v.com/rn"
+    assert cards[0]["actions"][-1]["url"] == "https://v.com/rn"
 
 
 def test_entry_cards_over_three_parts_link_to_web():
@@ -54,6 +61,29 @@ def test_entry_cards_over_three_parts_link_to_web():
     assert len(cards) == 1
     assert f"Full entry: {WEB}/events/{ev.id}" in card_text(cards[0])
     assert cards[0]["body"][0]["text"] == "**Vendor: October 2026 (1 of 4 parts)**"
+
+
+def hidden(card):
+    return [b for b in card["body"] if b.get("type") == "Container" and b.get("isVisible") is False]
+
+
+def test_long_entry_card_shows_a_preview_and_folds_the_rest():
+    body = "\n\n".join(f"* Fix number {i}: " + "detail " * 30 for i in range(30))  # ~7 KB
+    ev = event(body)
+    [card] = entry_cards(ev, "Vendor", None, WEB)
+    [fold] = hidden(card)
+    visible = card_text(card)
+    rest = "\n".join(b["text"] for b in fold["items"])
+    assert len(visible) <= PREVIEW_LIMIT + 200 and "Fix number 0" in visible and "Fix number 29" in rest
+    assert words(visible.split("\n", 1)[1].replace("_Adds X._", "", 1) + "\n" + rest) == words(card_markdown(body))
+    toggle = [a for a in card["actions"] if a["type"] == "Action.ToggleVisibility"]
+    assert toggle and toggle[0]["targetElements"] == [fold["id"]]
+    assert card["actions"][-1] == {"type": "Action.OpenUrl", "title": "Open page", "url": "https://v.com/rn"}
+
+
+def test_short_entry_card_has_nothing_folded():
+    [card] = entry_cards(event("* One fix."), "Vendor", None, WEB)
+    assert not hidden(card) and [a["type"] for a in card["actions"]] == ["Action.OpenUrl"]
 
 
 def test_edited_card_shows_the_readable_diff_as_text():

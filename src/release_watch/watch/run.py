@@ -15,7 +15,7 @@ from release_watch.watch.extract import body_hash, extract_markdown
 from release_watch.watch.readers import ReadResult, read_source
 from release_watch.watch.retire import retire_older_versions
 from release_watch.watch.rules import newer_than_tracked, same_version_line, version_tuple
-from release_watch.watch.split import heading_version
+from release_watch.watch.split import heading_version, own_release
 from release_watch.watch.successor import on_successor_baseline, propose_successors
 from release_watch.watch.summary import summarize
 
@@ -320,7 +320,7 @@ async def _build_events(sf, fetcher, src, mode: str, changes: Changes) -> list[E
                     bodies = []
                     break
                 bodies.append(text)
-            body = "\n\n".join(bodies)
+            body = own_release("\n\n".join(bodies), entry.heading)  # cumulative pages repeat older releases
             if not body:
                 status, reason = "needs_look", "child_fetch_failed"
             events.append(EntryEvent(id=uuid.uuid4(), source_id=src.id, kind="new", heading=entry.heading,

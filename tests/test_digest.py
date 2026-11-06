@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from release_watch.models import CatalogProduct, Digest, Entry, EntryEvent, JobRun, WatchedSource
 from release_watch.notify.digest import preview_digest, run_digest
-from release_watch.notify.teams import Teams, TeamsError
+from release_watch.notify.teams import CARD_GAP, SUMMARY_HEAD_START, Teams, TeamsError
 
 HOOK = "https://prod.westus.logic.azure.com/workflows/abc/triggers/manual/paths/invoke?sig=SECRETSIG"
 NOW = datetime(2026, 11, 4, 8, tzinfo=UTC)
@@ -53,6 +53,20 @@ def posted_texts(route):
         card = json.loads(call.request.content)["attachments"][0]["content"]
         out.append("\n".join(b.get("text", "") for b in card["body"]))
     return out
+
+
+@respx.mock
+async def test_digest_gives_the_summary_card_a_head_start(session_factory):
+    # The Power Automate flow posts each request in its own run, in parallel: spacing the posts keeps the order.
+    seed(session_factory)
+    respx.post(HOOK).mock(return_value=httpx.Response(202))
+    slept = []
+
+    async def sleep(seconds):
+        slept.append(seconds)
+
+    await run_digest(session_factory, Teams(HOOK, sleep=sleep), web_base_url="http://rw", now=NOW)
+    assert slept == [SUMMARY_HEAD_START, CARD_GAP]
 
 
 @respx.mock

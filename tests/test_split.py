@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from release_watch.watch.split import entry_key, split_entries
+from release_watch.watch.split import entry_key, own_release, split_entries
 
 PAGES = Path(__file__).parent / "fixtures" / "pages"
 
@@ -112,3 +112,16 @@ def test_heading_version_skips_chapter_numbers():
     assert heading_version("5.2.1.1. OADP 1.6.2 release notes") == "1.6.2"
     assert heading_version("5.13.1.2. Install the Data Protection Application") is None
     assert heading_version("10.4 release notes") == "10.4" and heading_version("v1.19.0") == "v1.19.0"
+
+
+def test_own_release_drops_the_older_releases_a_cumulative_page_repeats():
+    # Atempo's "Lina 7.4.2" page carries 7.4.1's and 7.4.0's notes under it.
+    page = ("# Lina 7.4.2\n\n## Fixes and improvements\n\n* Agent fix.\n\n## Lina 7.4.1\n\n* Older fix.\n\n"
+            "### Lina 7.4.0\n\n* GA notes.")
+    assert own_release(page, "Lina 7.4.2") == "# Lina 7.4.2\n\n## Fixes and improvements\n\n* Agent fix."
+
+
+def test_own_release_keeps_headings_that_only_mention_a_version():
+    page = "# Lina 7.4.2\n\n## Fixed since 7.4.0\n\n* Fix.\n\n## Upgrading from Lina 7.3\n\n* Steps."
+    assert own_release(page, "Lina 7.4.2") == page
+    assert own_release(page, "October 2026") == page  # a heading without a version: nothing to compare

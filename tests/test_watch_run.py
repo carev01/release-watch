@@ -116,6 +116,19 @@ async def test_index_entry_mode_sends_child_verbatim(session_factory):
     assert "New: thing." in ev.body and ev.summary == "Adds X."
 
 
+async def test_index_entry_mode_child_drops_the_older_releases_it_repeats(session_factory):
+    follow = {"mode": "entry", "pick": {"type": "links", "href_regex": r"/rn/lina-"}}
+    add_source(session_factory, kind="index_page", follow=follow)
+    day1 = '<a href="/rn/lina-7.4.1">Lina 7.4.1</a>'
+    day2 = '<a href="/rn/lina-7.4.2">Lina 7.4.2</a>' + day1
+    child = "https://x.com/rn/lina-7.4.2"
+    page = "<h1>Lina 7.4.2</h1><p>Agent fix.</p><h2>Lina 7.4.1</h2><p>Older fix.</p>"
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, day1)}))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, day2), child: html_page(child, page)}))
+    [ev] = events(session_factory)
+    assert "Agent fix." in ev.body and "Older fix." not in ev.body
+
+
 def add_product(sf, version):
     pid = uuid.uuid4()
     with sf() as s:
