@@ -23,7 +23,7 @@ from release_watch.llm import LLMClient
 from release_watch.notify.alert import send_alert
 from release_watch.notify.digest import run_digest
 from release_watch.notify.teams import Teams
-from release_watch.watch.login import SessionFetcher, browser_login
+from release_watch.watch.login import SITES, SessionFetcher, browser_login
 from release_watch.watch.run import run_watch
 from release_watch.watch.weekly import run_login_visits
 
@@ -125,8 +125,12 @@ def watch(only: str = typer.Option(None, help="Only sources whose URL or vendor 
 
 
 @app.command("watch-login")
-def watch_login() -> None:
+def watch_login(vendor: str = typer.Option(None, help="Only this vendor (AvePoint or Securiti), for a hand run.")) -> None:
     """Weekly: sign in to AvePoint and Securiti once each and read their login-walled sources."""
+    sites = [s for s in SITES if not vendor or s.name.lower() == vendor.lower()]
+    if not sites:
+        typer.echo(f"unknown vendor: {vendor} (choose from {', '.join(s.name for s in SITES)})", err=True)
+        raise typer.Exit(2)
 
     async def body(settings, session_factory) -> dict:
         teams = make_teams(settings)
@@ -136,7 +140,7 @@ def watch_login() -> None:
                 login=lambda site: browser_login(client, settings, site),
                 fetcher_for=lambda cookies, hosts: SessionFetcher(client, settings, cookies, hosts=hosts),
                 alert=lambda text: send_alert(teams, session_factory, text),
-                confirm_delay=settings.login_confirm_delay_seconds)
+                confirm_delay=settings.login_confirm_delay_seconds, sites=sites)
 
     _run("watch-login", body)
 

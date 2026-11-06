@@ -102,6 +102,20 @@ def test_watch_login_records_its_own_job(env, monkeypatch):
     assert (run.job, run.status) == ("watch-login", "ok")
 
 
+def test_watch_login_vendor_option_visits_only_that_vendor(env, monkeypatch):
+    seen = {}
+
+    async def visits(*args, sites, **kw):
+        seen["sites"] = [s.name for s in sites]
+        return {"vendors": {}}
+
+    monkeypatch.setattr(cli, "run_login_visits", visits)
+    result = CliRunner().invoke(cli.app, ["watch-login", "--vendor", "securiti"])
+    assert result.exit_code == 0, result.output
+    assert seen["sites"] == ["Securiti"]
+    assert CliRunner().invoke(cli.app, ["watch-login", "--vendor", "nobody"]).exit_code != 0
+
+
 class RecordingTeams:
     def __init__(self):
         self.cards = []

@@ -82,24 +82,32 @@ export default async function ({ page, context }) {
   for (let i = 0; i < 20 && page.url().includes('#/login'); i++) await sleep(1000);
   if (page.url().includes('#/login')) return stop('signed in');
   await sleep(5000);
-  // A "Help Center" button opens a menu with "Documentation", which opens the signed-in help center in a new
-  // window (2026-11-05: the sidebar "?"; the top-right "?" opens a pane instead). Try each button in turn.
-  const helps = await page.$$('button[aria-label="Help Center"]');
-  if (!helps.length) return stop('help center button');
-  let docs = null;
-  for (const h of helps) {
-    await h.click().catch(() => {});
-    await sleep(3000);
-    docs = await leaf(page, { text: 'Documentation', exact: true });
-    if (docs) break;
-    await page.keyboard.press('Escape');
-    await sleep(1000);
+  // The top-right "?" (button.c-contextual-help-link) opens the Help Center pane; the sidebar "?" opens a menu
+  // instead. The app loads slowly, so wait for the button (waits keep the worst case under LOGIN_TIMEOUT), then for the pane's Document360 frame to show
+  // "Open in new tab" (#article-open-new), which opens the signed-in help center in a new window.
+  let help = null;
+  for (let i = 0; i < 30 && !help; i++) {
+    help = await page.$('button.c-contextual-help-link');
+    if (!help) await sleep(1000);
   }
-  if (!docs) return stop('help center menu');
+  if (!help) return stop('help center button');
+  await sleep(3000);
+  let openNew = null;
+  for (let attempt = 0; attempt < 2 && !openNew; attempt++) {  // a second click if the pane didn't open
+    await help.click().catch(() => {});
+    for (let i = 0; i < 30 && !openNew; i++) {
+      await sleep(1000);
+      for (const frame of page.frames()) {
+        openNew = await frame.$('#article-open-new').catch(() => null);
+        if (openNew) break;
+      }
+    }
+  }
+  if (!openNew) return stop('help pane');
   // Matched by address: the browser already holds other pages (about:blank, Browserless' own).
   const opened = page.browser().waitForTarget(t => t.type() === 'page' &&
       t.url().startsWith('https://helpcenter.securiti.ai/'), { timeout: 30000 }).then(t => t.page()).catch(() => null);
-  await docs.click();
+  await openNew.click();
   const win = await opened;
   if (!win) return stop('help center window');
   await sleep(5000);
