@@ -108,6 +108,11 @@ def split_entries(markdown: str, rule: dict | None = None) -> list[Entry]:
                 return []
             level = min(counts, key=lambda lvl: (-counts[lvl], lvl))
         starts = [h for h in heads if h[1] == level]
+    if "within" in rule:  # keep only entries whose enclosing section heading matches (skip a page's FAQ)
+        section = re.compile(rule["within"], re.I)
+        starts = [s for s in starts
+                  if (parent := next((t for i, lvl, t in reversed(heads) if i < s[0] and lvl < s[1]), None))
+                  and section.search(parent)]
 
     entries: list[Entry] = []
     seen: dict[str, int] = {}
@@ -115,6 +120,9 @@ def split_entries(markdown: str, rule: dict | None = None) -> list[Entry]:
     bounds = starts if rule.get("to_next_match") else heads
     for idx, lvl, text in starts:
         end = next((j for j, l2, _ in bounds if j > idx and l2 <= lvl), len(lines))
+        if "end_regex" in rule:  # a page's own section blurbs end the entry above them
+            stop = re.compile(rule["end_regex"], re.I)
+            end = next((j for j in range(idx + 1, end) if stop.search(lines[j].strip())), end)
         key = entry_key(text)
         seen[key] = seen.get(key, 0) + 1
         if seen[key] > 1:

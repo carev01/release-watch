@@ -1043,6 +1043,12 @@ source_config:
       pick:
         type: links
         href_regex: /EnterpriseReleaseNotes/RN\d+\.\d+/index\.html$
+# 23 entries: only "New capabilities" and "Important notices"; the page's "FAQ updates" section is skipped (owner, 2026-11-07)
+- url: https://learn.microsoft.com/en-us/microsoft-365/backup/backup-whats-new
+  split_rule:
+    heading_level: 3
+    within: ^(new capabilities|important notices)$
+    end_regex: ^(\*\*(earlier capability|new capabilities|faq updates|important notices)\b.*|---)$
 # 43 entries, newest "Vaulted backup support for Azure Cosmos DB is now generally available"
 - url: https://learn.microsoft.com/en-us/azure/backup/whats-new
   split_rule:

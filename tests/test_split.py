@@ -125,3 +125,21 @@ def test_own_release_keeps_headings_that_only_mention_a_version():
     page = "# Lina 7.4.2\n\n## Fixed since 7.4.0\n\n* Fix.\n\n## Upgrading from Lina 7.3\n\n* Steps."
     assert own_release(page, "Lina 7.4.2") == page
     assert own_release(page, "October 2026") == page  # a heading without a version: nothing to compare
+
+
+def test_within_keeps_only_entries_under_the_named_sections():
+    # Microsoft 365 Backup "What's new": dated items under New capabilities, FAQ updates and Important notices.
+    page = ("# What's new\n\n## In this article\n\n## New capabilities\n\n### Granular restore\n\n**September 2, 2026**\n\nA.\n\n"
+            "## FAQ updates\n\n### What happens when I delete a dynamic rule?\n\n**November 4, 2026**\n\nB.\n\n"
+            "## Important notices\n\n### Hybrid Exchange isn't supported\n\n**January 24, 2026**\n\nC.\n\n## Feedback\n\n### Rate")
+    entries = split_entries(page, {"heading_level": 3, "within": "^(new capabilities|important notices)$"})
+    assert [e.heading for e in entries] == ["Granular restore", "Hybrid Exchange isn't supported"]
+    assert entries[0].body.endswith("A.") and entries[1].body.endswith("C.")
+
+
+def test_end_regex_keeps_section_blurbs_out_of_the_entry_above():
+    page = ("## New capabilities\n\n### Granular restore\n\n**September 2, 2026**\n\nA.\n\n"
+            "**Earlier capability updates from the 12-month review**\n\n### Use GCC\n\n**February 23, 2026**\n\nB.\n\n"
+            "---\n\n**FAQ updates** - New or revised guidance\n\n## FAQ updates")
+    entries = split_entries(page, {"heading_level": 3, "end_regex": r"^(\*\*(earlier capability|faq updates)\b.*|---)$"})
+    assert [e.body.splitlines()[-1] for e in entries] == ["A.", "B."]
