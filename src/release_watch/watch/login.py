@@ -32,7 +32,7 @@ _HELPERS = r"""
     return h.asElement();
   };
   const click = async (p, selector) => { const el = await p.$(selector); if (!el) return false; await el.click(); return true; };
-  await page.setUserAgent(context.ua);
+  await page.setUserAgent(context.ua || (await page.browser().userAgent()).replace('HeadlessChrome', 'Chrome'));
   await page.setViewport({ width: 1440, height: 900 });
 """
 
@@ -118,7 +118,7 @@ export default async function ({ page, context }) {
 # One page in a fresh session carrying the signed-in cookies. Same capture as fetch.BROWSER_FUNCTION.
 READ_PAGE = r"""
 export default async function ({ page, context }) {
-  await page.setUserAgent(context.ua);
+  await page.setUserAgent(context.ua || (await page.browser().userAgent()).replace('HeadlessChrome', 'Chrome'));
   await page.setViewport({ width: 1440, height: 900 });
   const cookies = context.cookies.map(c => {
     const o = { name: c.name, value: c.value, domain: c.domain, path: c.path || '/', secure: !!c.secure,

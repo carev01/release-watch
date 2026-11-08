@@ -100,7 +100,7 @@ def classify_response(status: int | None, url: str, final_url: str, body: str,
 # A huge page may never go network-idle; its HTML is there anyway, so a navigation timeout is tolerated.
 BROWSER_FUNCTION = r"""
 export default async function ({ page, context }) {
-  await page.setUserAgent(context.userAgent);
+  await page.setUserAgent(context.userAgent || (await page.browser().userAgent()).replace('HeadlessChrome', 'Chrome'));
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
   let doc = null;
   page.on('response', r => { if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) doc = r; });

@@ -198,7 +198,15 @@ async def test_browser_host_is_read_through_browserless():
     assert req.headers["Authorization"] == "Bearer tok-secret" and "tok-secret" not in str(req.url)
     ctx = json.loads(req.content)["context"]
     assert ctx["url"] == "https://docs.example.com/rn" and ctx["warmupUrl"] == "https://docs.example.com/en"
-    assert "Mozilla/5.0" in ctx["userAgent"] and "Headless" not in ctx["userAgent"]
+    # No fixed user agent: the browser reports its own Chrome version, so the UA matches its client hints.
+    assert ctx["userAgent"] == ""
+    assert "replace('HeadlessChrome', 'Chrome')" in json.loads(req.content)["code"]
+
+
+def test_login_scripts_use_the_browsers_own_user_agent():
+    from release_watch.watch.login import SITES
+    for site in SITES:
+        assert "context.ua || (await page.browser().userAgent()).replace('HeadlessChrome', 'Chrome')" in site.script
 
 
 @respx.mock

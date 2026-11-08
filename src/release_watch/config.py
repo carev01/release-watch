@@ -30,13 +30,6 @@ CHROME_USER_AGENT = (
 )
 
 
-# Browserless' Chromium says "HeadlessChrome" by default, which some edges (Cohesity, Akamai) refuse.
-BROWSER_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/141.0.0.0 Safari/537.36"
-)
-
-
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="RW_", extra="ignore", hide_input_in_errors=True)
 
@@ -57,7 +50,9 @@ class Settings(BaseSettings):
     # The shared in-cluster Browserless (a real Chrome), for hosts that refuse plain HTTP clients.
     browserless_url: str = "http://browserless.browserless.svc.cluster.local:3000"
     browserless_token: SecretStr = SecretStr("")
-    browser_user_agent: str = BROWSER_USER_AGENT
+    # Empty: the browser's own UA with "HeadlessChrome" (refused by Cohesity and Akamai) read as "Chrome". A fixed UA
+    # that disagrees with the browser's client hints is refused by Akamai too (Red Hat docs, 2026-11-07).
+    browser_user_agent: str = ""
     # The weekly login visit (watch-login). Only that job's pod gets these.
     avepoint_user: SecretStr = SecretStr("")
     avepoint_password: SecretStr = SecretStr("")
