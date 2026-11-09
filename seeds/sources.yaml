@@ -1482,6 +1482,14 @@ source_config:
   split_rule: {"heading_level": 1}
 - url: "https://learn.avepoint.com/tygraph/whats-new-in-this-release.html"
   split_rule: {"heading_level": 1}
+# These two were link lists that caught the site menu ("Data migration" solution page, 2026-11-09): same
+# template as the rest, so read the same way.
+- url: "https://learn.avepoint.com/fly-support-lists/whats-new-in-this-release.html"
+  kind: entry_page
+  split_rule: {"heading_level": 1}
+- url: "https://learn.avepoint.com/recenter/whats-new-in-this-release.html"
+  kind: entry_page
+  split_rule: {"heading_level": 1}
 # --- Securiti Help Center (weekly login visit; tuned from the first visit's snapshots, 2026-11-06) ---
 # Most product pages split at their "## 1.153" version headings on their own; these 8 put "### Release updates -
 # <month>" under each version, which split into look-alike entries. Pinned to the version heading instead.
