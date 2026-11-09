@@ -597,3 +597,19 @@ async def test_index_entry_mode_burst_keeps_releases_of_different_products(sessi
              for p in ("ep-1.15.19", "uv-2.112")}
     await run(session_factory, ScriptedFetcher({URL: html_page(URL, new + old), **pages}), now=later(24))
     assert sorted(ev.status for ev in events(session_factory)) == ["queued", "queued"]
+
+
+async def test_one_rewording_across_many_entries_is_logged_not_sent(session_factory):
+    def page(col):
+        return "".join(f"<h2>October {d}, 2026</h2><table><tr><th>{col}</th><th>Details</th></tr>"
+                       f"<tr><td>v8.1.{d}</td><td>Windows: r1110{d}</td></tr></table>" for d in (14, 21, 28))
+    reformatted = page("Product").replace("<td>v8.1.", "<td>inSync Client 8.1.")
+    add_source(session_factory)
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, page("Version"))}), now=later(0))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, reformatted)}), now=later(24))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, reformatted)}), now=later(48))
+    evs = events(session_factory)
+    assert len(evs) == 3 and {(e.kind, e.status, e.reason, e.summary) for e in evs} == {
+        ("edited", "dismissed", "site_reformat", None)}
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, reformatted)}), now=later(72))
+    assert len(events(session_factory)) == 3  # the entries now hold the new wording

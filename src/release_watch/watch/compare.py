@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from release_watch.watch.extract import body_hash, punct_insensitive
+from release_watch.watch.extract import body_hash, normalize, punct_insensitive
 from release_watch.watch.readers import ReadResult
 from release_watch.watch.split import Entry
 
@@ -15,6 +15,7 @@ _MARKER = re.compile(r"^\s*(#{1,6}\s+|[*+-]\s+|\d+\.\s+)")
 _TOKEN = re.compile(r"\s+|\w[\w.-]*\w|\w|[^\w\s]")
 
 MAX_NEW = 3
+REFORMAT_MIN = 3  # entries showing the same change before it reads as the site's own reformat
 MAX_EDIT_RATIO = 0.5
 SHRINK_RATIO = 0.2
 
@@ -127,6 +128,27 @@ def readable_diff(old: str, new: str) -> str:
     sections = [(title, lines) for title, lines in (("Changed", changed), ("Added", added), ("Removed", removed))
                 if lines]
     return "\n\n".join(f"**{title}**\n" + "\n".join(f"- {line}" for line in lines) for title, lines in sections)
+
+
+def _change_set(old: str, new: str) -> set[tuple[str, str]]:
+    """An edit's word changes, numbers masked, so one site-wide rewording looks the same in every entry."""
+    def words(text):
+        return [re.sub(r"\d+", "#", w) for w in re.findall(r"[^\W_]+", re.sub(r"[*_]+", "", normalize("\n".join(_content_lines(text)))))]
+    a, b = words(old), words(new)
+    return {(" ".join(a[i1:i2]), " ".join(b[j1:j2]))
+            for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
+            if op != "equal"}
+
+
+def reformatted(edits: list[tuple[str, str]]) -> list[bool]:
+    """For each (old, new) edit of one page: is every change in it also in REFORMAT_MIN or more of the page's edits?
+    Druva renaming every table's "Version" column at once is a reformat, not news."""
+    changes = [_change_set(old, new) for old, new in edits]
+    seen: dict[tuple[str, str], int] = {}
+    for found in changes:
+        for change in found:
+            seen[change] = seen.get(change, 0) + 1
+    return [bool(found) and all(seen[c] >= REFORMAT_MIN for c in found) for found in changes]
 
 
 def edit_diff(old: str, new: str) -> tuple[str, float]:

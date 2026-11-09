@@ -118,3 +118,22 @@ def test_readable_diff_keeps_leading_punctuation_outside_the_bold():
     new = old.replace("US East, and", "US East, Europe, Canada, and")
     diff = readable_diff(old, new)
     assert "US East, **Europe, Canada**, and Australia" in diff
+
+
+def test_site_reformat_repeated_across_entries_is_recognised():
+    from release_watch.watch.compare import reformatted
+    # Druva, 2026-11-09: every release table's "Version | v8.1.x" column became "Product | inSync Client".
+    def table(version, build):
+        return (f"# Day\n\n### inSync Client {version} for Windows\n\nFixes.\n\n| **Version** | **Details** |\n"
+                f"| --- | --- |\n| **{version}** | Windows: {build} |")
+    def reformatted_table(version, build):
+        return (f"# Day\n\n### inSync Client {version} for Windows\n\nFixes.\n\n| **Product** | **Details** |\n"
+                f"| --- | --- |\n| **inSync Client** | Windows: {build} |")
+    pairs = [(table(v, b), reformatted_table(v, b)) for v, b in (("v8.1.5", "r111028"), ("v8.1.4", "r111026"),
+                                                                 ("v8.1.3", "8.1.3r111021"))]
+    bolded = (table("v8.1.1", "r111008").replace("Fixes.", "**Revision**s"),
+              reformatted_table("v8.1.1", "r111008").replace("Fixes.", "Revisions"))
+    pairs.append(bolded)  # bold moved within a word: markup, not a change of its own
+    real = (table("v8.1.6", "r111032"), reformatted_table("v8.1.6", "r111032") + "\n\nNew: SCIM provisioning.")
+    assert reformatted(pairs + [real]) == [True, True, True, True, False]
+    assert reformatted(pairs[:2]) == [False, False]  # two alike edits may be real: the rule needs three

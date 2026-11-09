@@ -175,6 +175,32 @@ def seed(path: Path) -> None:
 
 
 @app.command()
+def rehash() -> None:
+    """After a change to the comparison rules: re-derive stored entries' fingerprints, so the next watch doesn't
+    read the new rules as edits."""
+    from sqlalchemy import select
+
+    from release_watch.models import Entry, WatchedSource
+    from release_watch.watch.extract import body_hash, strip_furniture
+
+    counts = {"entries": 0, "latest_pages": 0}
+    with _session_factory(get_settings())() as s:
+        for entry in s.scalars(select(Entry)):
+            body = strip_furniture(entry.body)
+            if (body, body_hash(body)) != (entry.body, entry.body_hash):
+                entry.body, entry.body_hash = body, body_hash(body)
+                counts["entries"] += 1
+        for src in s.scalars(select(WatchedSource).where(WatchedSource.latest_page.is_not(None))):
+            page = src.latest_page
+            text = strip_furniture(page["text"])
+            if (text, body_hash(text)) != (page["text"], page["hash"]):
+                src.latest_page = {**page, "text": text, "hash": body_hash(text)}
+                counts["latest_pages"] += 1
+        s.commit()
+    typer.echo(json.dumps(counts))
+
+
+@app.command()
 def web(host: str = "0.0.0.0", port: int = 8000) -> None:
     """Serve the review queue."""
     import uvicorn

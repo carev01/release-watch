@@ -150,3 +150,29 @@ def test_failure_alert_without_webhook_is_kept_for_the_web_ui(env, monkeypatch):
     with env() as s:
         [d] = s.scalars(select(Digest)).all()
     assert d.channel == "web" and d.cards[0]["body"][0]["text"].startswith("Release Watch job sync failed")
+
+
+def test_rehash_brings_stored_entries_up_to_the_current_comparison_rules(env):
+    import uuid
+
+    from release_watch.models import Entry
+    from release_watch.watch.extract import body_hash
+    stored = "## 1.149\n\n* Fix.\n\nWas this article helpful?\n\nYes  No\n\nPrevious article\n\nPCS"
+    with env() as s:
+        src = WatchedSource(vendor_name="V", url="https://v.com/rn", url_key="v.com/rn", kind="entry_page",
+                            state="active", origin="seed",
+                            latest_page={"url": "u", "text": stored, "hash": "old", "pending_hash": None})
+        s.add(src)
+        s.flush()
+        s.add(Entry(id=uuid.uuid4(), source_id=src.id, key="1.149", heading="1.149", body=stored, body_hash="old"))
+        s.add(Entry(id=uuid.uuid4(), source_id=src.id, key="1.148", heading="1.148", body="## 1.148\n\n* Old.",
+                    body_hash=body_hash("## 1.148\n\n* Old.")))
+        s.commit()
+    result = CliRunner().invoke(cli.app, ["rehash"])
+    assert result.exit_code == 0, result.output
+    assert '"entries": 1' in result.output and '"latest_pages": 1' in result.output
+    with env() as s:
+        entry = s.scalar(select(Entry).where(Entry.key == "1.149"))
+        assert entry.body == "## 1.149\n\n* Fix." and entry.body_hash == body_hash("## 1.149\n\n* Fix.")
+        page = s.scalar(select(WatchedSource)).latest_page
+        assert page["text"] == "## 1.149\n\n* Fix." and page["hash"] == entry.body_hash

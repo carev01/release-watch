@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 
 from release_watch.models import CatalogProduct, CatalogSource, Entry, EntryEvent, FetchAttempt, Snapshot, WatchedSource
 from release_watch.urls import host_of, normalize_url
-from release_watch.watch.compare import Changes, Known, compare, gate, page_suspect, readable_diff
+from release_watch.watch.compare import Changes, Known, compare, gate, page_suspect, readable_diff, reformatted
 from release_watch.watch.extract import body_hash, extract_markdown
 from release_watch.watch.readers import ReadResult, read_source
 from release_watch.watch.retire import retire_older_versions
@@ -282,8 +282,14 @@ async def _settle_confirmed(sf, fetcher, llm, p: _Pending, second: ReadResult, a
 
     mode = _mode(src)
     events = await _build_events(sf, fetcher, src, mode, to_send)
+    # One rewording across many entries at once is the site's reformat: logged, unsent.
+    reworded = {(e.heading, e.body) for (e, k), r in zip(to_send.edited,
+                                                         reformatted([(k.body, e.body) for e, k in to_send.edited])) if r}
     for ev in events:
-        if ev.kind in ("new", "edited"):
+        if ev.kind == "edited" and ev.status == "queued" and (ev.heading, ev.body) in reworded:
+            ev.status, ev.reason = "dismissed", "site_reformat"
+    for ev in events:
+        if ev.kind in ("new", "edited") and ev.status != "dismissed":
             ev.summary = await summarize(llm, src.vendor_name, ev.heading, ev.diff or ev.body or "")
 
     with sf() as s:

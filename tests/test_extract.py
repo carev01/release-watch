@@ -66,3 +66,29 @@ def test_more_noise_patterns_ignored():
     for noise in ("Last Published Date: 10/03/2026", "Updated: Oct 3, 2026", "Published 3 days ago",
                   "1.2K views", "12 out of 15 found this helpful"):
         assert body_hash(base + noise) == body_hash(base), noise
+
+
+def test_feedback_buttons_and_article_pager_are_page_furniture():
+    # AvePoint and Securiti help pages (2026-11-09): a feedback prompt and a Document360 pager under the notes.
+    base = "## 1.149\n\n* Fixed the asset discovery metric (PRIV-226273)."
+    chrome = ("\n\nWas this article helpful?\n\nYes  No\n\nPrevious article\n\nTroubleshooting for PCS\n\n"
+              "Next article\n\nIntegrations API Reference")
+    assert body_hash(base + chrome) == body_hash(base)
+    assert body_hash(base + "\n\nOn this page\n\nWas this article helpful?\n\nYesNo") == body_hash(base + "\n\nOn this page")
+    html = f"<main><h2>1.149</h2><ul><li>{'Fixed the asset discovery metric. ' * 8}</li></ul>" \
+           "<p>Was this article helpful?</p><p>Yes No</p><p>Previous article</p><p>Troubleshooting for PCS</p>" \
+           "<p>Next article</p><p>Integrations API Reference</p></main>"
+    md = extract_markdown(html, URL)
+    assert "Fixed the asset" in md and "helpful" not in md and "Previous article" not in md and "PCS" not in md
+
+
+def test_a_line_that_only_mentions_the_next_article_is_kept():
+    text = "## 1.149\n\n* The Next article button now opens in a new tab."
+    assert "next article button" in normalize(text)
+
+
+def test_signed_image_link_with_spaces_in_the_name_ignores_its_token():
+    # Securiti's Document360 screenshots: "Screenshot ... PM.png?sv=...&st=<now>&sig=<new each visit>".
+    link = "![Form](https://cdn.us.document360.io/x/Screenshot 2026-09-15 at 4.01.00 PM.png?st=2026-11-{}T02%3A22&sig={})"
+    assert body_hash("## 1.151\n\n" + link.format("06", "abc")) == body_hash("## 1.151\n\n" + link.format("09", "xyz"))
+    assert "4.01.00 pm.png" in normalize(link.format("06", "abc"))

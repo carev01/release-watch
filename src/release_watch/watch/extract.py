@@ -13,7 +13,10 @@ NOISE_PATTERNS = re.compile(
     r"|\d+ out of \d+ found this helpful|was this (article|page) helpful|print this page)\b.*$",
     re.I | re.M,
 )
-_LINK_QUERY = re.compile(r"(\]\([^)\s?]+)\?[^)\s]*")
+# Widgets under a help article: feedback buttons ("Yes  No", "YesNo") and a Document360 pager, each pager line
+# followed by the linked article's title (AvePoint, Securiti).
+_FURNITURE = re.compile(r"^[ \t]*(was this (article|page) helpful\??|yes[ \t]*no|(previous|next) article[ \t]*\n\s*[^\n]*)[ \t]*$", re.I | re.M)
+_LINK_QUERY = re.compile(r"(\]\([^)?\n]+)\?[^)\s]*")  # file names may hold spaces (Document360)
 _BARE_QUERY = re.compile(r"(https?://[^\s)?\]]+)\?[^\s)\]]*")
 
 
@@ -32,7 +35,15 @@ def html_to_markdown(fragment: str) -> str:
         return root.text(separator="\n", strip=True) if root else ""
 
 
+def strip_furniture(markdown: str) -> str:
+    return re.sub(r"\n{3,}", "\n\n", _FURNITURE.sub("", markdown)).strip()
+
+
 def extract_markdown(html: str, url: str, selector: str | None = None) -> str:
+    return strip_furniture(_extract_markdown(html, url, selector))
+
+
+def _extract_markdown(html: str, url: str, selector: str | None) -> str:
     if selector:
         node = LexborHTMLParser(html).css_first(selector)
         return html_to_markdown(node.html) if node is not None else ""
@@ -54,7 +65,7 @@ def extract_markdown(html: str, url: str, selector: str | None = None) -> str:
 def normalize(text: str) -> str:
     text = _LINK_QUERY.sub(r"\1", text)
     text = _BARE_QUERY.sub(r"\1", text)
-    text = NOISE_PATTERNS.sub("", text)
+    text = NOISE_PATTERNS.sub("", _FURNITURE.sub("", text))
     return re.sub(r"\s+", " ", text).strip().casefold()
 
 
