@@ -1505,6 +1505,9 @@ source_config:
   split_rule: {"heading_level": 2}
 - url: "https://helpcenter.securiti.ai/docs/sensitive-data-intelligence-release-notes"
   split_rule: {"heading_level": 2}
+# Risk Management took on the same "### Release updates - <month>" headings on 2026-11-16.
+- url: "https://helpcenter.securiti.ai/docs/risk-management-release-notes"
+  split_rule: {"heading_level": 2}
 - url: "https://helpcenter.securiti.ai/docs/workflows-release-notes"
   split_rule: {"heading_level": 2}
 # 5 entries, 1.153 to 1.149: each version also has "## Monitored Data Systems" / "## IaaS Connectors" sections,
