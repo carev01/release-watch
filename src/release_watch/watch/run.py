@@ -286,7 +286,7 @@ async def _settle_confirmed(sf, fetcher, llm, p: _Pending, second: ReadResult, a
     reworded = {(e.heading, e.body) for (e, k), r in zip(to_send.edited,
                                                          reformatted([(k.body, e.body) for e, k in to_send.edited])) if r}
     for ev in events:
-        if ev.kind == "edited" and ev.status == "queued" and (ev.heading, ev.body) in reworded:
+        if ev.kind == "edited" and ev.status in ("queued", "needs_look") and (ev.heading, ev.body) in reworded:
             ev.status, ev.reason = "dismissed", "site_reformat"
     for ev in events:
         if ev.kind in ("new", "edited") and ev.status != "dismissed":

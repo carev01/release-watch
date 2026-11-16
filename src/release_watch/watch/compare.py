@@ -15,6 +15,7 @@ _MARKER = re.compile(r"^\s*(#{1,6}\s+|[*+-]\s+|\d+\.\s+)")
 _TOKEN = re.compile(r"\s+|\w[\w.-]*\w|\w|[^\w\s]")
 
 MAX_NEW = 3
+MAX_EDITS = 5  # more edits than this from one page in one run wait for a look
 REFORMAT_MIN = 3  # entries showing the same change before it reads as the site's own reformat
 MAX_EDIT_RATIO = 0.5
 SHRINK_RATIO = 0.2
@@ -173,8 +174,9 @@ def gate(changes: Changes, max_new: int = MAX_NEW, max_edit_ratio: float = MAX_E
     too_many = len(changes.new) > max_new
     for entry in changes.new:
         out.append(("new", entry, None, "needs_look" if too_many else "queued", "too_many_new" if too_many else None))
+    many = len(changes.edited) > MAX_EDITS
     for entry, known in changes.edited:
         _, ratio = edit_diff(known.body, entry.body)
-        big = ratio > max_edit_ratio
-        out.append(("edited", entry, known, "needs_look" if big else "queued", "edit_too_large" if big else None))
+        reason = "too_many_edits" if many else "edit_too_large" if ratio > max_edit_ratio else None
+        out.append(("edited", entry, known, "needs_look" if reason else "queued", reason))
     return out

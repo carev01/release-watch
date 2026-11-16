@@ -16,7 +16,11 @@ NOISE_PATTERNS = re.compile(
 # Widgets under a help article: feedback buttons ("Yes  No", "YesNo") and a Document360 pager, each pager line
 # followed by the linked article's title (AvePoint, Securiti).
 _FURNITURE = re.compile(r"^[ \t]*(was this (article|page) helpful\??|yes[ \t]*no|(previous|next) article[ \t]*\n\s*[^\n]*)[ \t]*$", re.I | re.M)
+# A line that is only a link to a spot on the same page is a table of contents ("On this page", Kasten).
+_CONTENTS_LINE = re.compile(r"^[ \t]*([*+-][ \t]+)?\[[^\]\n]*\]\(#[^)\n]*\)[ \t]*$", re.M)
 _LINK_QUERY = re.compile(r"(\]\([^)?\n]+)\?[^)\s]*")  # file names may hold spaces (Document360)
+# In-page anchors: Docusaurus numbers them in page order ("#bug-fixes-27"), so one release added on top renumbers all.
+_ANCHOR_LINK = re.compile(r"\]\(#[^)]*\)")
 _BARE_QUERY = re.compile(r"(https?://[^\s)?\]]+)\?[^\s)\]]*")
 
 
@@ -36,7 +40,7 @@ def html_to_markdown(fragment: str) -> str:
 
 
 def strip_furniture(markdown: str) -> str:
-    return re.sub(r"\n{3,}", "\n\n", _FURNITURE.sub("", markdown)).strip()
+    return re.sub(r"\n{3,}", "\n\n", _CONTENTS_LINE.sub("", _FURNITURE.sub("", markdown))).strip()
 
 
 def extract_markdown(html: str, url: str, selector: str | None = None) -> str:
@@ -63,6 +67,7 @@ def _extract_markdown(html: str, url: str, selector: str | None) -> str:
 
 
 def normalize(text: str) -> str:
+    text = _ANCHOR_LINK.sub("]()", _CONTENTS_LINE.sub("", text))
     text = _LINK_QUERY.sub(r"\1", text)
     text = _BARE_QUERY.sub(r"\1", text)
     text = NOISE_PATTERNS.sub("", _FURNITURE.sub("", text))

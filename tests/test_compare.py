@@ -1,4 +1,4 @@
-from release_watch.watch.compare import Known, compare, edit_diff, gate, page_suspect, readable_diff
+from release_watch.watch.compare import Changes, Known, compare, edit_diff, gate, page_suspect, readable_diff
 from release_watch.watch.extract import body_hash
 from release_watch.watch.readers import ReadResult
 from release_watch.watch.split import Entry
@@ -137,3 +137,10 @@ def test_site_reformat_repeated_across_entries_is_recognised():
     real = (table("v8.1.6", "r111032"), reformatted_table("v8.1.6", "r111032") + "\n\nNew: SCIM provisioning.")
     assert reformatted(pairs + [real]) == [True, True, True, True, False]
     assert reformatted(pairs[:2]) == [False, False]  # two alike edits may be real: the rule needs three
+
+
+def test_many_edits_from_one_page_wait_for_a_look():
+    from release_watch.watch.compare import MAX_EDITS
+    edits = [(e(f"v{i}", f"## v{i}\n\nFix {i} b."), k(f"v{i}", f"## v{i}\n\nFix {i} a.")) for i in range(MAX_EDITS + 1)]
+    assert {(status, reason) for *_, status, reason in gate(Changes(edited=edits))} == {("needs_look", "too_many_edits")}
+    assert {status for *_, status, _ in gate(Changes(edited=edits[:MAX_EDITS]))} == {"queued"}

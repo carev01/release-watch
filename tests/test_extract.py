@@ -1,6 +1,13 @@
 from pathlib import Path
 
-from release_watch.watch.extract import body_hash, extract_markdown, html_to_markdown, normalize, punct_insensitive
+from release_watch.watch.extract import (
+    body_hash,
+    extract_markdown,
+    html_to_markdown,
+    normalize,
+    punct_insensitive,
+    strip_furniture,
+)
 
 PAGES = Path(__file__).parent / "fixtures" / "pages"
 URL = "https://x.com/rn"
@@ -92,3 +99,19 @@ def test_signed_image_link_with_spaces_in_the_name_ignores_its_token():
     link = "![Form](https://cdn.us.document360.io/x/Screenshot 2026-09-15 at 4.01.00 PM.png?st=2026-11-{}T02%3A22&sig={})"
     assert body_hash("## 1.151\n\n" + link.format("06", "abc")) == body_hash("## 1.151\n\n" + link.format("09", "xyz"))
     assert "4.01.00 pm.png" in normalize(link.format("06", "abc"))
+
+
+def test_renumbered_in_page_anchors_are_not_a_change():
+    # Docusaurus (Kasten, Portworx) numbers section anchors in page order; a release added on top renumbers them all.
+    old = '## 8.0.11\n\n### Bug Fixes[​](#bug-fixes-26 "Direct link to Bug Fixes")\n\n* Fixed restore.'
+    new = '## 8.0.11\n\n### Bug Fixes[​](#bug-fixes-27 "Direct link to Bug Fixes")\n\n* Fixed restore.'
+    assert body_hash(old) == body_hash(new)
+    assert body_hash(old) != body_hash(old.replace("restore", "backup"))
+
+
+def test_on_this_page_contents_are_furniture():
+    # Kasten's "On this page" list lands under the oldest entry and grows with every release.
+    entry = "## 2.5.4\n\n* Fixed restore. See [Known Issues](#known-issues) first."
+    toc = "\n\n* [9.0.11](#9011)\n* [9.0.10](#9010)\n  + [Upgrade Notes](#upgrade-notes)"
+    assert body_hash(entry + toc) == body_hash(entry)
+    assert strip_furniture(entry + toc) == entry
