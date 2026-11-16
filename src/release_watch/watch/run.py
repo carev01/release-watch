@@ -18,7 +18,7 @@ from release_watch.watch.rules import newer_than_tracked, same_version_line, ver
 from release_watch.watch.split import DATE_RE, heading_version, own_release
 from release_watch.watch.split import Entry as SplitEntry
 from release_watch.watch.successor import on_successor_baseline, propose_successors
-from release_watch.watch.summary import summarize
+from release_watch.watch.summary import judge_edit, summarize
 
 MAX_PARALLEL = 8
 OK_OUTCOMES = ("baseline", "same", "changed")
@@ -289,6 +289,8 @@ async def _settle_confirmed(sf, fetcher, llm, p: _Pending, second: ReadResult, a
         if ev.kind == "edited" and ev.status in ("queued", "needs_look") and (ev.heading, ev.body) in reworded:
             ev.status, ev.reason = "dismissed", "site_reformat"
     for ev in events:
+        if ev.kind == "edited" and ev.status == "queued":
+            await _judge(llm, src, ev)
         if ev.kind in ("new", "edited") and ev.status != "dismissed":
             ev.summary = await summarize(llm, src.vendor_name, ev.heading, ev.diff or ev.body or "")
 
@@ -301,7 +303,8 @@ async def _settle_confirmed(sf, fetcher, llm, p: _Pending, second: ReadResult, a
                                           .where(EntryEvent.dedupe_key == ev.dedupe_key)):
                 continue
             s.add(ev)
-            counts["events_queued" if ev.status == "queued" else "events_needs_look"] += 1
+            if ev.status != "dismissed":
+                counts["events_queued" if ev.status == "queued" else "events_needs_look"] += 1
         if mode == "entry" and changes.new:  # the newest release page is the one followed from now on
             newest = _newest(to_send.new)
             sent = next((ev for ev in events if ev.kind == "new" and ev.url == newest.url and ev.body), None)
@@ -383,8 +386,10 @@ async def _follow_latest(sf, fetcher, llm, src, entries: list, at: datetime, cou
     elif same_visit_edits or (page.get("pending_hash") == h and since and at - since >= EDIT_HOLD):
         diff = readable_diff(page["text"], text)
         event = EntryEvent(id=uuid.uuid4(), source_id=src.id, kind="edited", heading=page["heading"], body=text,
-                           diff=diff, url=page["url"], status="queued",
-                           summary=await summarize(llm, src.vendor_name, page["heading"], diff))
+                           diff=diff, url=page["url"], status="queued")
+        await _judge(llm, src, event)
+        if event.status != "dismissed":
+            event.summary = await summarize(llm, src.vendor_name, page["heading"], diff)
         page = _page_state(entry, text)
     elif page.get("pending_hash") != h:
         page = page | {"pending_hash": h, "pending_since": at.isoformat()}
@@ -392,8 +397,18 @@ async def _follow_latest(sf, fetcher, llm, src, entries: list, at: datetime, cou
         s.get(WatchedSource, src.id).latest_page = page
         if event:
             s.add(event)
-            counts["events_queued"] += 1
+            if event.status != "dismissed":
+                counts["events_queued" if event.status == "queued" else "events_needs_look"] += 1
         s.commit()
+
+
+async def _judge(llm, src, ev: EntryEvent) -> None:
+    """A language model reads the edit's diff: noise is logged, unsent; no clear answer waits for a look."""
+    meaningful, reason = await judge_edit(llm, src.vendor_name, ev.heading, ev.diff or "")
+    if meaningful is False:
+        ev.status, ev.reason, ev.summary = "dismissed", "judged_noise", f"Judged noise: {reason}" if reason else None
+    elif meaningful is None:
+        ev.status, ev.reason = "needs_look", "judge_failed"
 
 
 def _version_of(*texts: str) -> str | None:

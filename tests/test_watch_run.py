@@ -613,3 +613,42 @@ async def test_one_rewording_across_many_entries_is_logged_not_sent(session_fact
         ("edited", "dismissed", "site_reformat", None)}
     await run(session_factory, ScriptedFetcher({URL: html_page(URL, reformatted)}), now=later(72))
     assert len(events(session_factory)) == 3  # the entries now hold the new wording
+
+
+async def test_edit_judged_noise_is_logged_not_sent(session_factory):
+    add_source(session_factory)
+    llm = SummaryLLM(verdict={"meaningful": False, "reason": "Only formatting changed."})
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, DAY1)}), llm=llm, now=later(0))
+    edited = DAY1.replace("<li>SAML sign-on.</li>", "<li>SAML sign-on.</li><li>SCIM provisioning.</li>")
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, edited)}), llm=llm, now=later(24))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, edited)}), llm=llm, now=later(48))
+    [ev] = events(session_factory)
+    assert (ev.kind, ev.status, ev.reason, ev.summary) == ("edited", "dismissed", "judged_noise",
+                                                           "Judged noise: Only formatting changed.")
+
+
+async def test_edit_the_judge_cannot_decide_waits_for_a_look(session_factory):
+    add_source(session_factory)
+    llm = SummaryLLM(verdict=LLMError("down"))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, DAY1)}), llm=llm, now=later(0))
+    edited = DAY1.replace("<li>SAML sign-on.</li>", "<li>SAML sign-on.</li><li>SCIM provisioning.</li>")
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, edited)}), llm=llm, now=later(24))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, edited)}), llm=llm, now=later(48))
+    [ev] = events(session_factory)
+    assert (ev.kind, ev.status, ev.reason) == ("edited", "needs_look", "judge_failed")
+
+
+async def test_latest_release_page_edit_is_judged_too(session_factory):
+    add_source(session_factory, kind="index_page", follow=LINA_FOLLOW)
+    child = "https://x.com/rn/lina-7.4.2"
+    llm = SummaryLLM(verdict={"meaningful": False, "reason": "Typo fixed."})
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, lina_list("7.4.1"))}), llm=llm, now=later(0))
+    listed = html_page(URL, lina_list("7.4.2", "7.4.1"))
+    await run(session_factory, ScriptedFetcher({URL: listed, child: lina_page("7.4.2", "Agent fx.")}), llm=llm,
+              now=later(24))
+    for hours in (48, 72):
+        await run(session_factory, ScriptedFetcher({URL: listed, child: lina_page("7.4.2", "Agent fix.")}), llm=llm,
+                  now=later(hours))
+    new, edit = events(session_factory)
+    assert (edit.kind, edit.status, edit.reason, edit.summary) == ("edited", "dismissed", "judged_noise",
+                                                                   "Judged noise: Typo fixed.")

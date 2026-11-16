@@ -9,7 +9,7 @@ from selectolax.lexbor import LexborHTMLParser
 
 # Per-page chrome that changes without the content changing (spec 7.2 step 3).
 NOISE_PATTERNS = re.compile(
-    r"^.*\b(last (updated|visited|modified|published)|updated(?=:)|published \d+ \w+ ago|[\d.,]+k? views?"
+    r"^.*\b(last (updated|uploaded|visited|modified|published)|updated(?=:)|published \d+ \w+ ago|[\d.,]+k? views?"
     r"|\d+ out of \d+ found this helpful|was this (article|page) helpful|print this page)\b.*$",
     re.I | re.M,
 )
