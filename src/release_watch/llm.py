@@ -30,7 +30,7 @@ class LLMClient:
                 {"api-key": s.azure_openai_api_key.get_secret_value()},
                 {"model": s.azure_openai_model, "messages": messages,
                  "response_format": {"type": "json_object"},
-                 # gpt-5-mini reasons before answering; reasoning tokens count against this budget.
+                 # The model reasons before answering; reasoning tokens count against this budget.
                  "max_completion_tokens": max_tokens, "reasoning_effort": "low"},
             )
         if s.openrouter_api_key.get_secret_value():

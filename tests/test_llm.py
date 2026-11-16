@@ -33,7 +33,7 @@ async def test_azure_success():
     req = azure.calls[0].request
     assert req.headers["api-key"] == "az-key"
     body = json.loads(req.content)
-    assert body["model"] == "gpt-5-mini"
+    assert body["model"] == "gpt-6-luna"
     assert body["response_format"] == {"type": "json_object"}
 
 

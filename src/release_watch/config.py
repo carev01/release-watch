@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     docextractor_ui_url: str = "http://docextractor.k3s.home.lan"
     azure_openai_endpoint: str = ""
     azure_openai_api_key: SecretStr = SecretStr("")
-    azure_openai_model: str = "gpt-5-mini"
+    azure_openai_model: str = "gpt-6-luna"
     openrouter_api_key: SecretStr = SecretStr("")
     openrouter_model: str = "openai/gpt-5-mini"
     excluded_products: list[str] = list(DEFAULT_EXCLUDED_PRODUCTS)
