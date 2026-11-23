@@ -242,6 +242,24 @@ async def _madcap(fetcher, url: str, pick: dict):
     return last, _dedupe(kids)
 
 
+S3_MAX_PAGES = 10
+_S3_NEXT = re.compile(r"<IsTruncated>true</IsTruncated>.*?<NextContinuationToken>([^<]+)</NextContinuationToken>", re.S)
+
+
+async def _s3_pages(fetcher, url: str, first):
+    """An S3 bucket listing (list-type=2) returns 1,000 keys a page: read the later pages too, so a new file
+    past the first page isn't missed. Any page that fails fails the whole read."""
+    texts, result = [first.text], first
+    for _ in range(S3_MAX_PAGES - 1):
+        if not (m := _S3_NEXT.search(result.text)):
+            break
+        result = await fetcher.fetch(f"{url}&continuation-token={quote(htmllib.unescape(m.group(1)), safe='')}")
+        if result.outcome != "ok":
+            return result, ""
+        texts.append(result.text)
+    return first, "\n".join(texts)  # the first page's address and status stand for the listing
+
+
 async def children(fetcher, url: str, follow: dict):
     """Fetch url, apply the rule, and follow `then` through the newest child. Returns (last FetchResult, children)."""
     if follow.get("pick", {}).get("type") == "madcap":
@@ -250,7 +268,12 @@ async def children(fetcher, url: str, follow: dict):
     result = await fetcher.fetch(url)
     if result.outcome != "ok":
         return result, []
-    kids = pick_children(result.text, result.content_type, result.final_url, follow.get("pick", {"type": "links"}))
+    text = result.text
+    if follow.get("pick", {}).get("s3_pages"):
+        result, text = await _s3_pages(fetcher, url, result)
+        if result.outcome != "ok":
+            return result, []
+    kids = pick_children(text, result.content_type, result.final_url, follow.get("pick", {"type": "links"}))
     if follow.get("then") and kids:
         return await children(fetcher, newest(kids, follow.get("newest", "first")).url, follow["then"])
     rewrites = follow.get("url_rewrite", [])

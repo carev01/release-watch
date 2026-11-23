@@ -222,3 +222,41 @@ def test_same_version_line_rejects_numbers_from_another_scheme():
     assert same_version_line("10.9", "10.9") and same_version_line("9.4", "10.9")
     assert not same_version_line("1.6", "5.0")  # OADP's own versions vs the OpenShift docs version
     assert not same_version_line("1.2645", "11.46")  # a component's build number vs the product release
+
+
+async def test_versions_pick_follows_s3_listing_pages():
+    """Quest's documents bucket lists 1,000 keys a page: the newest release may sit on a later page."""
+    from release_watch.fetch import FetchResult
+    from tests.fakes import ScriptedFetcher
+
+    def listing(keys, token=None):
+        more = f"<IsTruncated>true</IsTruncated><NextContinuationToken>{token}</NextContinuationToken>" if token \
+            else "<IsTruncated>false</IsTruncated>"
+        xml = "<ListBucketResult>" + more + "".join(f"<Contents><Key>{k}</Key></Contents>" for k in keys) + \
+            "</ListBucketResult>"
+        return lambda url: FetchResult(url, url, 200, "application/xml", xml, len(xml), "ok", "")
+
+    base = "https://b.s3.amazonaws.com/?list-type=2&start-after=82442"
+    pages = {base: listing(["82443_vRanger_7.8.7_ReleaseNotes.pdf"], "tok/1+="),
+             base + "&continuation-token=tok%2F1%2B%3D": listing(["83990_vRanger_7.8.8_ReleaseNotes.pdf"])}
+    fetcher = ScriptedFetcher({u: make(u) for u, make in pages.items()})
+    pick = {"type": "versions", "raw": True, "s3_pages": True, "regex": r"<Key>\d+_vRanger_([\d.]+)_ReleaseNotes\.pdf"}
+    result, kids = await children(fetcher, base, {"pick": pick})
+    assert [k.title for k in kids] == ["7.8.8", "7.8.7"]
+    assert result.outcome == "ok" and len(fetcher.calls) == 2
+
+
+async def test_s3_listing_page_failure_fails_the_read():
+    """A missing later page must not read as "no newer version"."""
+    from release_watch.fetch import FetchResult
+    from tests.fakes import ScriptedFetcher
+
+    base = "https://b.s3.amazonaws.com/?list-type=2"
+    xml = "<ListBucketResult><IsTruncated>true</IsTruncated><NextContinuationToken>t</NextContinuationToken>" \
+          "<Contents><Key>1_X_1.0_ReleaseNotes.pdf</Key></Contents></ListBucketResult>"
+    fetcher = ScriptedFetcher({
+        base: FetchResult(base, base, 200, "application/xml", xml, len(xml), "ok", ""),
+        base + "&continuation-token=t": FetchResult(base, base, 503, "text/html", "", 0, "error", "http_503")})
+    result, kids = await children(fetcher, base, {"pick": {"type": "versions", "raw": True, "s3_pages": True,
+                                                           "regex": r"_X_([\d.]+)_"}})
+    assert result.outcome == "error" and kids == []

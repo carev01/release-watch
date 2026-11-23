@@ -499,6 +499,34 @@ watched_sources:
   title: Commvault documentation version menu (11.46, 11.44, 11.42, 11.40, 2024e)
   notes: 'The docs top bar loads this header; its Versions menu lists every published version. Older versions'' headers
     are rebuilt too (11.40''s lists 11.46), so this URL keeps showing new versions. Year names like 2024e are skipped.'
+- vendor: Quest Software
+  product: NetVault
+  url: https://prod-support-public.s3.amazonaws.com/?list-type=2&start-after=83718
+  kind: index_page
+  title: Quest documents bucket - NetVault release notes (S3 listing)
+  notes: 'Public S3 listing of the Quest documents bucket from just after key 83718, so 83719_NetVault_14.1.3_ReleaseNotes.pdf is the first NetVault release
+    notes it shows. A new release adds <number>_NetVault_<version>_ReleaseNotes*.pdf.'
+- vendor: Quest Software
+  product: QoreStore
+  url: https://prod-support-public.s3.amazonaws.com/?list-type=2&start-after=83725
+  kind: index_page
+  title: Quest documents bucket - QoreStor release notes (S3 listing)
+  notes: 'Public S3 listing of the Quest documents bucket from just after key 83725, so 83726_QoreStor_7.7.0_ReleaseNotes.pdf is the first QoreStor release
+    notes it shows. A new release adds <number>_QoreStor_<version>_ReleaseNotes*.pdf.'
+- vendor: Quest Software
+  product: Rapid Recovery
+  url: https://prod-support-public.s3.amazonaws.com/?list-type=2&start-after=82668
+  kind: index_page
+  title: Quest documents bucket - RapidRecovery release notes (S3 listing)
+  notes: 'Public S3 listing of the Quest documents bucket from just after key 82668, so 82669_RapidRecovery_6.11_ReleaseNotes_en-us.pdf is the first RapidRecovery release
+    notes it shows. A new release adds <number>_RapidRecovery_<version>_ReleaseNotes*.pdf.'
+- vendor: Quest Software
+  product: vRanger
+  url: https://prod-support-public.s3.amazonaws.com/?list-type=2&start-after=82442
+  kind: index_page
+  title: Quest documents bucket - vRanger release notes (S3 listing)
+  notes: 'Public S3 listing of the Quest documents bucket from just after key 82442, so 82443_vRanger_7.8.7_ReleaseNotes.pdf is the first vRanger release
+    notes it shows. A new release adds <number>_vRanger_<version>_ReleaseNotes*.pdf.'
 news_sources:
 - vendor: Arcserve
   product: null
@@ -1520,3 +1548,23 @@ source_config:
 # The product release-notes links; a new one is a page to look at
 - url: "https://helpcenter.securiti.ai/docs/hyperdrive-release-notes-1"
   follow: {"pick": {"type": "links", "text_regex": "release notes$"}}
+
+# --- Quest Software (2026-11-23): support.quest.com and www.quest.com answer bots with a CAPTCHA, but every Quest
+# document lands in the public prod-support-public S3 bucket (behind support-public.cfm.quest.com, where DocExtractor's PDFs
+# live) under a rising number with the version in its name. Each list starts just before the product's current release
+# notes; s3_pages follows the listing past 1,000 keys.
+- url: "https://prod-support-public.s3.amazonaws.com/?list-type=2&start-after=83718"
+  follow: {"pick": {"type": "versions", "raw": true, "s3_pages": true, "regex": "(?i)<Key>\\d+_NetVault_(\\d+(?:\\.\\d+)+)_ReleaseNotes[^<]*\\.pdf</Key>"}}
+- url: "https://prod-support-public.s3.amazonaws.com/?list-type=2&start-after=83725"
+  follow: {"pick": {"type": "versions", "raw": true, "s3_pages": true, "regex": "(?i)<Key>\\d+_QoreStor_(\\d+(?:\\.\\d+)+)_ReleaseNotes[^<]*\\.pdf</Key>"}}
+- url: "https://prod-support-public.s3.amazonaws.com/?list-type=2&start-after=82668"
+  follow: {"pick": {"type": "versions", "raw": true, "s3_pages": true, "regex": "(?i)<Key>\\d+_RapidRecovery_(\\d+(?:\\.\\d+)+)_ReleaseNotes[^<]*\\.pdf</Key>"}}
+- url: "https://prod-support-public.s3.amazonaws.com/?list-type=2&start-after=82442"
+  follow: {"pick": {"type": "versions", "raw": true, "s3_pages": true, "regex": "(?i)<Key>\\d+_vRanger_(\\d+(?:\\.\\d+)+)_ReleaseNotes[^<]*\\.pdf</Key>"}}
+# Identity Recovery is SaaS: its release-notes PDFs keep their address and are re-uploaded with new text
+- url: "https://support-public.cfm.quest.com/82566_Identity_Recovery_for_Active_Directory_ReleaseNotes.pdf"
+  kind: entry_page
+- url: "https://support-public.cfm.quest.com/82570_Identity_Recovery_for_Microsoft_Entra_ID_ReleaseNotes.pdf"
+  kind: entry_page
+- url: "https://support-public.cfm.quest.com/82551_Security_Management_Platform_GlobalSettings_ReleaseNotes.pdf"
+  kind: entry_page
