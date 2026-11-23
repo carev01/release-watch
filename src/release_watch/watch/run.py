@@ -49,9 +49,11 @@ class _Pending:
 def _load_state(s, source_id) -> _State:
     rows = s.execute(select(Entry.key, Entry.body_hash, Entry.body, Entry.removed_at, Entry.pending_hash,
                             Entry.pending_since).where(Entry.source_id == source_id)).all()
+    # With no stored entries the next good read is a fresh baseline (a reshape, or entries cleared by hand when a
+    # vendor rebuilt its page), so its size is not held against the page's old size.
     prev_size = s.scalar(select(FetchAttempt.bytes).where(FetchAttempt.source_id == source_id,
                                                           FetchAttempt.outcome.in_(OK_OUTCOMES))
-                         .order_by(FetchAttempt.fetched_at.desc()).limit(1))
+                         .order_by(FetchAttempt.fetched_at.desc()).limit(1)) if rows else None
     return _State([Known(r.key, r.body_hash, r.body, r.pending_hash, r.pending_since) for r in rows], prev_size,
                   sum(1 for r in rows if r.removed_at is None))
 

@@ -87,6 +87,19 @@ async def test_shrunk_page_is_suspect_and_streak_counts(session_factory):
     assert events(session_factory) == []
 
 
+async def test_rebaseline_accepts_a_smaller_page(session_factory):
+    """Entries cleared on purpose (a reshape, or a vendor that cut its page to one release) start a fresh
+    baseline from the page as it is now, even when it is much smaller than the last good read."""
+    sid = add_source(session_factory)
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, DAY1 * 20)}))
+    with session_factory() as s:
+        s.query(Entry).filter(Entry.source_id == sid).delete()
+        s.commit()
+    counts = await run(session_factory, ScriptedFetcher({URL: html_page(URL, NEW)}))
+    assert counts["baseline"] == 1 and counts["suspect"] == 0
+    assert events(session_factory) == []
+
+
 async def test_gone_marks_source_gone(session_factory):
     sid = add_source(session_factory)
     await run(session_factory, ScriptedFetcher({URL: html_page(URL, "", status=404, outcome="gone",
