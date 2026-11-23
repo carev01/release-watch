@@ -115,3 +115,12 @@ async def test_session_fetcher_page_that_leaves_the_vendor_sites_is_blocked():
 def test_login_timeout_leaves_room_for_the_slowest_login_but_stays_under_browserless_limit():
     from release_watch.watch.login import LOGIN_TIMEOUT
     assert 240 <= LOGIN_TIMEOUT < 300  # Browserless TIMEOUT=300000 ms
+
+
+def test_securiti_help_pane_retries_with_a_fresh_button():
+    """The app re-renders its toolbar while loading: a click on an old button handle is lost (2026-11-23), so each
+    of the three attempts looks the button up again."""
+    from release_watch.watch.login import SECURITI_LOGIN
+    loop = SECURITI_LOGIN.split("for (let attempt = 0; attempt < 3", 1)
+    assert len(loop) == 2
+    assert "page.$('button.c-contextual-help-link')" in loop[1].split("if (!openNew)", 1)[0]

@@ -14,7 +14,7 @@ from release_watch.config import Settings
 from release_watch.fetch import BROWSER_CONCURRENCY, BROWSER_TIMEOUT, FetchResult, HostPolicy, parse_browser_reply
 from release_watch.urls import host_of
 
-LOGIN_TIMEOUT = 240.0  # the slowest Securiti login, under Browserless' 300 s session limit
+LOGIN_TIMEOUT = 280.0  # the slowest Securiti login (about 250 s worst case), under Browserless' 300 s session limit
 
 # Shared by the login scripts: a stop result names the step that didn't look as expected.
 _HELPERS = r"""
@@ -92,10 +92,13 @@ export default async function ({ page, context }) {
   }
   if (!help) return stop('help center button');
   await sleep(3000);
+  // Up to three clicks, each on a freshly found button: the app re-renders its toolbar while it loads, and a click
+  // on the old button is silently lost (the 2026-11-23 visit stopped here; the same steps worked an hour later).
   let openNew = null;
-  for (let attempt = 0; attempt < 2 && !openNew; attempt++) {  // a second click if the pane didn't open
+  for (let attempt = 0; attempt < 3 && !openNew; attempt++) {
+    help = (await page.$('button.c-contextual-help-link')) || help;
     await help.click().catch(() => {});
-    for (let i = 0; i < 30 && !openNew; i++) {
+    for (let i = 0; i < 25 && !openNew; i++) {
       await sleep(1000);
       for (const frame of page.frames()) {
         openNew = await frame.$('#article-open-new').catch(() => null);
@@ -103,7 +106,7 @@ export default async function ({ page, context }) {
       }
     }
   }
-  if (!openNew) return stop('help pane');
+  if (!openNew) return stop((await page.$('#document360-widget-iframe')) ? 'help pane' : 'help pane (widget not loaded)');
   // Matched by address: the browser already holds other pages (about:blank, Browserless' own).
   const opened = page.browser().waitForTarget(t => t.type() === 'page' &&
       t.url().startsWith('https://helpcenter.securiti.ai/'), { timeout: 30000 }).then(t => t.page()).catch(() => null);
