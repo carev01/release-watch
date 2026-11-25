@@ -579,7 +579,7 @@ async def test_latest_release_page_additions_arrive_as_an_edit(session_factory):
     assert "https://x.com/rn/lina-7.4.1" not in fetcher.calls  # older release pages are left alone
     new, edit = events(session_factory)
     assert (edit.kind, edit.status, edit.heading, edit.url) == ("edited", "queued", "Lina 7.4.2", child)
-    assert "Agent fix." in edit.diff and edit.summary == "Adds X."
+    assert "Agent fix." in edit.diff and edit.summary == "Adds a feature."  # the judge's account of the change
     await run(session_factory, ScriptedFetcher({URL: listed, child: filled}), now=later(96))
     assert len(events(session_factory)) == 2
 

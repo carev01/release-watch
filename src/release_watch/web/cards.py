@@ -19,18 +19,21 @@ def markdown_html(text: str | None) -> Markup:
     return Markup(_md.render(text or ""))
 
 
-def _element(block: dict) -> str:
+def _element(block: dict, toggles: dict[str, str]) -> str:
     if block.get("type") == "TextBlock":
         return _block(block)
-    if block.get("type") == "Container":  # folded notes: Teams' "Show full notes" toggle
-        inner = "".join(_element(b) for b in block.get("items", []))
-        return f"<details><summary>Show full notes</summary>{inner}</details>" if block.get("isVisible") is False \
+    if block.get("type") == "Container":  # folded notes: Teams' toggle button ("Show full notes")
+        inner = "".join(_element(b, toggles) for b in block.get("items", []))
+        label = escape(toggles.get(block.get("id"), "Show full notes"))
+        return f"<details><summary>{label}</summary>{inner}</details>" if block.get("isVisible") is False \
             else inner
     return ""
 
 
 def card_html(card: dict) -> Markup:
-    body = "".join(_element(b) for b in card.get("body", []))
+    toggles = {target: a.get("title", "") for a in card.get("actions", [])
+               if a.get("type") == "Action.ToggleVisibility" for target in a.get("targetElements", [])}
+    body = "".join(_element(b, toggles) for b in card.get("body", []))
     actions = "".join(
         f'<a class="action" href="{escape(a["url"])}" rel="noreferrer">{escape(a.get("title", "Open"))}</a>'
         for a in card.get("actions", []) if str(a.get("url", "")).startswith(("http://", "https://")))

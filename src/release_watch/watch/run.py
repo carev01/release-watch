@@ -293,8 +293,8 @@ async def _settle_confirmed(sf, fetcher, llm, p: _Pending, second: ReadResult, a
     for ev in events:
         if ev.kind == "edited" and ev.status == "queued":
             await _judge(llm, src, ev)
-        if ev.kind in ("new", "edited") and ev.status != "dismissed":
-            ev.summary = await summarize(llm, src.vendor_name, ev.heading, ev.diff or ev.body or "")
+        if ev.kind == "new" and ev.status != "dismissed":
+            ev.summary = await summarize(llm, src.vendor_name, ev.heading, ev.body or "")
 
     with sf() as s:
         row = s.get(WatchedSource, src.id)
@@ -390,8 +390,6 @@ async def _follow_latest(sf, fetcher, llm, src, entries: list, at: datetime, cou
         event = EntryEvent(id=uuid.uuid4(), source_id=src.id, kind="edited", heading=page["heading"], body=text,
                            diff=diff, url=page["url"], status="queued")
         await _judge(llm, src, event)
-        if event.status != "dismissed":
-            event.summary = await summarize(llm, src.vendor_name, page["heading"], diff)
         page = _page_state(entry, text)
     elif page.get("pending_hash") != h:
         page = page | {"pending_hash": h, "pending_since": at.isoformat()}
@@ -405,9 +403,12 @@ async def _follow_latest(sf, fetcher, llm, src, entries: list, at: datetime, cou
 
 
 async def _judge(llm, src, ev: EntryEvent) -> None:
-    """A language model reads the edit's diff: noise is logged, unsent; no clear answer waits for a look."""
+    """A language model reads the edit's diff: noise is logged, unsent; no clear answer waits for a look. Its
+    account of what changed is the card's summary, so the card says what's different, not what the entry says."""
     meaningful, reason = await judge_edit(llm, src.vendor_name, ev.heading, ev.diff or "")
-    if meaningful is False:
+    if meaningful is True:
+        ev.summary = reason or None
+    elif meaningful is False:
         ev.status, ev.reason, ev.summary = "dismissed", "judged_noise", f"Judged noise: {reason}" if reason else None
     elif meaningful is None:
         ev.status, ev.reason = "needs_look", "judge_failed"

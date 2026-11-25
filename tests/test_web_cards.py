@@ -14,3 +14,12 @@ def test_folded_notes_render_behind_a_show_full_notes_toggle():
     assert "Fix number 0" in html and "<details><summary>Show full notes</summary>" in html
     assert html.index("<details>") < html.index("Fix number 29") < html.index("</details>")
     assert 'href="https://v.com/rn"' in html
+
+
+def test_folded_edit_renders_behind_its_own_toggle_label():
+    ev = EntryEvent(id=uuid.uuid4(), source_id=uuid.uuid4(), kind="edited", heading="7.4.2", body="b",
+                    diff="**Added**\n- SCIM provisioning.", summary="Adds SCIM provisioning.",
+                    url="https://v.com/rn", status="queued")
+    [card] = entry_cards(ev, "Vendor", None, "http://rw.lan")
+    html = str(card_html(card))
+    assert html.index("Adds SCIM provisioning.") < html.index("<details><summary>Show what changed</summary>")

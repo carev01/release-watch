@@ -120,8 +120,9 @@ class RecordingTeams:
     def __init__(self):
         self.cards = []
 
-    async def post(self, card):
+    async def post(self, card, category):
         self.cards.append(card)
+        self.category = category
 
 
 def test_job_failure_posts_immediate_alert(env, monkeypatch):
@@ -131,7 +132,7 @@ def test_job_failure_posts_immediate_alert(env, monkeypatch):
     result = CliRunner().invoke(cli.app, ["sync"])
     assert result.exit_code == 1
     [card] = teams.cards
-    assert card["body"][0]["text"].startswith("Release Watch job sync failed")
+    assert card["body"][0]["text"].startswith("Release Watch job sync failed") and teams.category == "alert"
 
 
 def test_digest_without_webhook_goes_to_the_web_ui(env):

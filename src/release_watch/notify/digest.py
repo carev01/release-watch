@@ -81,8 +81,9 @@ def _grouped(events: list, sources: dict, products: dict) -> dict[str, list]:
     return dict(sorted(groups.items()))
 
 
-def _plan(s, *, web_base_url: str, now: datetime) -> tuple[list[tuple[list, list[dict]]], list]:
-    """((events marked sent after these cards, cards) in posting order, events with nothing to tell the owner).
+def _plan(s, *, web_base_url: str, now: datetime) -> tuple[list[tuple[list, list[dict], str]], list]:
+    """((events marked sent after these cards, cards, their category) in posting order, events with nothing to
+    tell the owner). The category goes with each post, so the owner's flow can route health apart.
 
     The digest says what DocExtractor needs: a version newer than it tracks, or one of its pages that moved.
     The watch following a page to its next-version URL is its own housekeeping, so those lines stay out.
@@ -108,17 +109,17 @@ def _plan(s, *, web_base_url: str, now: datetime) -> tuple[list[tuple[list, list
                       for name, evs in _grouped(versions, sources, products).items()]
     update_groups = [(name, [ev.heading for ev in evs]) for name, evs in _grouped(updates, sources, products).items()]
 
-    plan: list[tuple[list, list[dict]]] = []
+    plan: list[tuple[list, list[dict], str]] = []
     if health.last_watch_ok is None or now - health.last_watch_ok > STALE_WATCH:
         age = "never" if health.last_watch_ok is None else \
             f"{int((now - health.last_watch_ok).total_seconds() // 3600)} h ago"
-        plan.append(([], [text_card(f"Release Watch: last successful watch was {age}. Check the watch job.")]))
-    plan.append((versions + updates, [summary_card(health, version_groups, counts, now, updates=update_groups)]))
+        plan.append(([], [text_card(f"Release Watch: last successful watch was {age}. Check the watch job.")], "health"))
+    plan.append((versions + updates, [summary_card(health, version_groups, counts, now, updates=update_groups)], "health"))
     for ev in sorted(entry_events, key=lambda e: (e.kind != "new", e.created_at)):
         src = sources.get(ev.source_id)
         product = products.get(src.product_de_id) if src and src.product_de_id else None
         plan.append(([ev], entry_cards(ev, src.vendor_name if src else "?", product.name if product else None,
-                                       web_base_url)))
+                                       web_base_url), ev.kind))
     return plan, silent
 
 
@@ -126,7 +127,7 @@ def preview_digest(session_factory, *, web_base_url: str, now: datetime) -> list
     """The cards the next digest would carry, if it ran now. Marks nothing sent."""
     with session_factory() as s:
         plan, _ = _plan(s, web_base_url=web_base_url, now=now)
-        return [card for _, cards in plan for card in cards]
+        return [card for _, cards, _ in plan for card in cards]
 
 
 async def run_digest(session_factory, teams, *, web_base_url: str, now: datetime, dry_run: bool = False,
@@ -135,18 +136,18 @@ async def run_digest(session_factory, teams, *, web_base_url: str, now: datetime
         plan, silent = _plan(s, web_base_url=web_base_url, now=now)
 
     if dry_run:
-        for _, cards in plan:
+        for _, cards, category in plan:
             for card in cards:
-                out(json.dumps(envelope(card), ensure_ascii=False))
-        return {"cards": sum(len(c) for _, c in plan), "events_sent": 0}
+                out(json.dumps(envelope(card, category), ensure_ascii=False))
+        return {"cards": sum(len(c) for _, c, _ in plan), "events_sent": 0}
 
     channel = "teams" if teams is not None else "web"
     delivered: list[dict] = []
     sent_events = 0
-    for events, cards in plan:
+    for events, cards, category in plan:
         for card in cards:
             if teams is not None:
-                await teams.post(card)
+                await teams.post(card, category)
             delivered.append(card)
         with session_factory() as s:
             for ev in events:

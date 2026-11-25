@@ -10,4 +10,4 @@ async def send_alert(teams, session_factory, text: str) -> None:
         s.add(Digest(channel="teams" if teams else "web", cards=[card]))
         s.commit()
     if teams is not None:
-        await teams.post(card)
+        await teams.post(card, "alert")

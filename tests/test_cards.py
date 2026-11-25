@@ -68,36 +68,59 @@ def hidden(card):
 
 
 def test_long_entry_card_shows_a_preview_and_folds_the_rest():
+    # Without a summary there is nothing to lead with: the first paragraphs show, the rest folds.
     body = "\n\n".join(f"* Fix number {i}: " + "detail " * 30 for i in range(30))  # ~7 KB
     ev = event(body)
+    ev.summary = None
     [card] = entry_cards(ev, "Vendor", None, WEB)
     [fold] = hidden(card)
     visible = card_text(card)
     rest = "\n".join(b["text"] for b in fold["items"])
     assert len(visible) <= PREVIEW_LIMIT + 200 and "Fix number 0" in visible and "Fix number 29" in rest
-    assert words(visible.split("\n", 1)[1].replace("_Adds X._", "", 1) + "\n" + rest) == words(card_markdown(body))
+    assert words(visible.split("\n", 1)[1] + "\n" + rest) == words(card_markdown(body))
     toggle = [a for a in card["actions"] if a["type"] == "Action.ToggleVisibility"]
     assert toggle and toggle[0]["targetElements"] == [fold["id"]]
     assert card["actions"][-1] == {"type": "Action.OpenUrl", "title": "Open page", "url": "https://v.com/rn"}
 
 
-def test_short_entry_card_has_nothing_folded():
-    [card] = entry_cards(event("* One fix."), "Vendor", None, WEB)
+def test_short_entry_card_without_a_summary_has_nothing_folded():
+    ev = event("* One fix.")
+    ev.summary = None
+    [card] = entry_cards(ev, "Vendor", None, WEB)
     assert not hidden(card) and [a["type"] for a in card["actions"]] == ["Action.OpenUrl"]
+
+
+def test_entry_card_leads_with_the_summary_and_folds_all_the_vendor_text():
+    [card] = entry_cards(event("* One fix."), "Vendor", None, WEB)
+    title, lead, *rest = card["body"]
+    assert lead == {"type": "TextBlock", "text": "Adds X.", "wrap": True}  # main text: not subtle, not italic
+    [fold] = hidden(card)
+    assert rest == [fold] and "* One fix." in fold["items"][0]["text"]
+    toggle = card["actions"][0]
+    assert toggle == {"type": "Action.ToggleVisibility", "title": "Show full notes", "targetElements": [fold["id"]]}
+
+
+def test_multi_part_entry_folds_every_part():
+    ev = event("\n\n".join(["word " * 1800] * 5))  # ~45 KB: three cards
+    for card in entry_cards(ev, "Vendor", "Product", WEB):
+        assert len(hidden(card)) == 1 and all(b.get("type") == "Container" or "word word" not in b.get("text", "")
+                                              for b in card["body"])
 
 
 def test_edited_card_shows_the_readable_diff_as_text():
     ev = event("body", kind="edited", diff="**Added**\n- SCIM provisioning.")
     [card] = entry_cards(ev, "Vendor", None, WEB)
     assert not [b for b in card["body"] if b.get("fontType") == "Monospace"]
-    assert "**Added**\n- SCIM provisioning." in card_text(card)
+    [fold] = hidden(card)
+    assert "**Added**\n- SCIM provisioning." in fold["items"][0]["text"]
+    assert card["actions"][0]["title"] == "Show what changed"
     assert card["body"][0]["text"].startswith("**Edited · Vendor")
 
 
 def test_entry_cards_drop_heading_anchor_marks():
     # Slide's docs put a "¶" anchor after each heading; the stored entry keeps it, the card doesn't.
     ev = event("## Box v40.0.0¶\n\n* Fixed restore [¶](#fixes)\n\nSee section 7.", diff=None)
-    ev.heading = "Box v40.0.0¶"
+    ev.heading, ev.summary = "Box v40.0.0¶", None  # no summary: the text shows, unfolded
     [card] = entry_cards(ev, "Slide", "Slide", WEB)
     assert card["body"][0]["text"] == "**Slide · Slide: Box v40.0.0**"
     assert "¶" not in card_text(card)
@@ -126,7 +149,12 @@ def test_envelope_shape():
     assert env["type"] == "message"
     assert env["attachments"][0]["contentType"] == "application/vnd.microsoft.card.adaptive"
     assert env["attachments"][0]["content"] == {"type": "AdaptiveCard"}
+    assert "category" not in env
     json.dumps(env)
+
+
+def test_envelope_names_its_category_for_the_flow_to_route_on():
+    assert envelope({"type": "AdaptiveCard"}, "health")["category"] == "health"
 
 
 def test_summary_card_drops_heading_anchor_marks():

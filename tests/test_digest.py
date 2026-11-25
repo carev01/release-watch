@@ -79,6 +79,7 @@ async def test_digest_sends_summary_then_entries(session_factory):
     assert "**Acme**\n\n- Version **2.0** is available: [Updates](https://acme.com/v2)" in texts[0] and "Acme: 2 new" in texts[0]
     assert "Entry 0" in texts[1] and "Sum 0" in texts[1] and "Entry 1" in texts[2]
     assert counts == {"cards": 3, "events_sent": 3, "channel": "teams"}
+    assert [json.loads(c.request.content)["category"] for c in route.calls] == ["health", "new", "new"]
     st = statuses(session_factory)
     assert st["Held"] == "needs_look"
     assert {st["Entry 0"], st["Entry 1"], st["Acme released a new version of Box: 2.0"]} == {"sent"}
@@ -115,6 +116,7 @@ async def test_digest_stale_watch_alert(session_factory):
     await run_digest(session_factory, teams(), web_base_url="http://rw", now=NOW)
     texts = posted_texts(route)
     assert texts[0].startswith("Release Watch: last successful watch was 30 h ago")
+    assert {json.loads(c.request.content)["category"] for c in route.calls} == {"health"}
 
 
 async def test_digest_dry_run_changes_nothing(session_factory):
@@ -161,7 +163,7 @@ async def test_webhook_url_never_logged(caplog):
     respx.post(HOOK).mock(side_effect=httpx.ConnectError("boom"))
     caplog.set_level(logging.DEBUG)
     with pytest.raises(TeamsError) as exc:
-        await teams().post({"type": "AdaptiveCard"})
+        await teams().post({"type": "AdaptiveCard"}, "alert")
     assert "SECRETSIG" not in caplog.text and "SECRETSIG" not in str(exc.value)
     assert "logic.azure.com" not in str(exc.value)
 
@@ -169,7 +171,7 @@ async def test_webhook_url_never_logged(caplog):
 @respx.mock
 async def test_teams_retries_once_on_429():
     route = respx.post(HOOK).mock(side_effect=[httpx.Response(429), httpx.Response(202)])
-    await teams().post({"type": "AdaptiveCard"})
+    await teams().post({"type": "AdaptiveCard"}, "alert")
     assert route.call_count == 2
 
 
@@ -179,7 +181,7 @@ async def test_any_post_error_hides_the_url():
             raise ValueError(f"bad url {request.url}")
 
     with pytest.raises(TeamsError) as exc:
-        await Teams(HOOK, transport=Boom(), sleep=no_sleep).post({"type": "AdaptiveCard"})
+        await Teams(HOOK, transport=Boom(), sleep=no_sleep).post({"type": "AdaptiveCard"}, "alert")
     assert "SECRETSIG" not in str(exc.value) and "logic.azure.com" not in str(exc.value)
     assert exc.value.__cause__ is None and exc.value.__suppress_context__
 

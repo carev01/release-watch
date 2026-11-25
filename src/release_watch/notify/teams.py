@@ -27,17 +27,17 @@ class Teams:
         self._url, self._transport, self._sleep = url, transport, sleep
         self._posted = 0
 
-    async def post(self, card: dict) -> None:
+    async def post(self, card: dict, category: str) -> None:
         if self._posted:
             await self._sleep(SUMMARY_HEAD_START if self._posted == 1 else CARD_GAP)
-        await self._post(card)
+        await self._post(card, category)
         self._posted += 1
 
-    async def _post(self, card: dict) -> None:
+    async def _post(self, card: dict, category: str) -> None:
         async with httpx.AsyncClient(timeout=httpx.Timeout(30.0), transport=self._transport) as http:
             for attempt in range(2):
                 try:
-                    resp = await http.post(self._url, json=envelope(card))
+                    resp = await http.post(self._url, json=envelope(card, category))
                 except httpx.TransportError as exc:
                     if attempt == 0:
                         await self._sleep(RETRY_DELAY)

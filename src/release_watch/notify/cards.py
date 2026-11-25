@@ -65,16 +65,16 @@ def _card(blocks: list[dict], url: str | None = None, actions: list[dict] = ()) 
     return card
 
 
-def _folded(text: str) -> tuple[list[dict], list[dict]]:
-    """(blocks, actions): a long text shows its first paragraphs; the rest sits in a hidden container that the
-    "Show full notes" button toggles."""
-    preview = split_parts(text, PREVIEW_LIMIT)[0]
+def _folded(text: str, *, whole: bool = False, label: str = "Show full notes") -> tuple[list[dict], list[dict]]:
+    """(blocks, actions): the text sits in a hidden container that the toggle button opens. whole: all of it
+    (the card leads with its summary); otherwise a long text shows its first paragraphs and a short one all."""
+    preview = "" if whole else split_parts(text, PREVIEW_LIMIT)[0]
     rest = text[len(preview):].strip()
     if not rest:
         return [_text(text)], []
     fold = {"type": "Container", "id": "full-notes", "isVisible": False, "items": [_text(rest)]}
-    toggle = {"type": "Action.ToggleVisibility", "title": "Show full notes", "targetElements": ["full-notes"]}
-    return [_text(preview), fold], [toggle]
+    toggle = {"type": "Action.ToggleVisibility", "title": label, "targetElements": ["full-notes"]}
+    return [*([_text(preview)] if preview else []), fold], [toggle]
 
 
 def entry_cards(event, vendor: str, product: str | None, web_base_url: str) -> list[dict]:
@@ -82,16 +82,18 @@ def entry_cards(event, vendor: str, product: str | None, web_base_url: str) -> l
     title = _unmarked(f"{'Edited · ' if edited else ''}{vendor}{f' · {product}' if product else ''}: {event.heading}")
     text = _unmarked(event.diff or "" if edited else card_markdown(event.body or ""))
     parts = split_parts(text)
-    summary = [_text(f"_{event.summary}_", isSubtle=True)] if event.summary else []
+    # The summary is the card's main text; the vendor's words wait behind the toggle for whoever wants them.
+    summary = [_text(event.summary)] if event.summary else []
+    fold = {"whole": bool(summary), "label": "Show what changed" if edited else "Show full notes"}
 
     if len(parts) > MAX_PARTS:
-        blocks, actions = _folded(parts[0])
+        blocks, actions = _folded(parts[0], **fold)
         return [_card([_text(f"**{title} (1 of {len(parts)} parts)**"), *summary, *blocks,
                        _text(f"Full entry: {web_base_url}/events/{event.id}")], event.url, actions)]
     cards = []
     for i, part in enumerate(parts, 1):
         suffix = f" ({i}/{len(parts)})" if len(parts) > 1 else ""
-        blocks, actions = _folded(part)
+        blocks, actions = _folded(part, **fold)
         cards.append(_card([_text(f"**{title}{suffix}**"), *(summary if i == 1 else []), *blocks],
                            event.url, actions))
     return cards
@@ -139,9 +141,12 @@ def summary_card(health, versions: list[tuple[str, list[str]]], counts: dict[str
     return _card(blocks)
 
 
-def envelope(card: dict) -> dict:
-    return {"type": "message",
-            "attachments": [{"contentType": "application/vnd.microsoft.card.adaptive", "content": card}]}
+def envelope(card: dict, category: str | None = None) -> dict:
+    """The webhook body. category ("health", "alert", "new", "edited") lets the owner's flow route the card:
+    triggerBody()?['category'] in Power Automate."""
+    env = {"type": "message",
+           "attachments": [{"contentType": "application/vnd.microsoft.card.adaptive", "content": card}]}
+    return {**env, "category": category} if category else env
 
 
 def text_card(text: str) -> dict:
