@@ -453,8 +453,9 @@ watched_sources:
   url: https://docs.backupexec.com/us/en/dlo-userdocs/pdf-handbooks.html
   kind: index_page
   title: DLO PDF handbooks (versions)
-  notes: 'Lists every DLO handbook as "Administrator''s Guide : v10.0 : 10.0". The page also lists Backup Exec PDFs
-    (v2014...), so the regex requires a DLO_ file name. Rate-limits bursts (one 429 seen): one read a day only.'
+  notes: 'Since 2026-11-23 lists only the current release, as plain text: "Administrator''s Guide (10.0 | Windows |
+    Product guides)"; the version is read from the Administrator''s Guide and Read Me lines. Rate-limits bursts (one
+    429 seen): one read a day only.'
 - vendor: Cohesity
   product: DataProtect
   url: https://docs.cohesity.com/docs/dataprotect
@@ -1448,8 +1449,9 @@ source_config:
   follow: {"pick": {"type": "versions", "raw": true, "regex": "/Arcserve-Backup/[Aa]vailable/[^\"]+\"[^>]*>\\s*(\\d+(?:\\.\\d+)+)"}}
 - url: "https://documentation.arcserve.com/Content/DocBookshelf.htm?product=rha"
   follow: {"pick": {"type": "versions", "raw": true, "regex": "/Arcserve-RHA/[Aa]vailable/[^\"]+\"[^>]*>\\s*(\\d+(?:\\.\\d+)+)"}}
+# Rebuilt 2026-11-23: no PDF links, only the current release as plain text, "Administrator's Guide (10.0 | Windows | Product guides)"
 - url: "https://docs.backupexec.com/us/en/dlo-userdocs/pdf-handbooks.html"
-  follow: {"pick": {"type": "versions", "raw": true, "regex": "/pdf/DLO_[^\"/]*\\.pdf\"[^>]*>[^<]*?:\\s*v\\s*(\\d+(?:\\.\\d+)*)\\s*:"}}
+  follow: {"pick": {"type": "versions", "raw": true, "regex": "(?:Administrator.{1,6}s Guide|Read Me) \\((\\d+(?:\\.\\d+)+) \\|"}}
 - url: "https://docs.cohesity.com/docs/dataprotect"
   follow: {"pick": {"type": "versions", "raw": true, "regex": "DataProtect (\\d+(?:\\.\\d+)+) \\|"}}
 - url: "https://support.hycu.com/api/v2/help_center/en-us/sections/115001018365/articles.json?per_page=100"
