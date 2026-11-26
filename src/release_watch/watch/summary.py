@@ -7,7 +7,9 @@ from release_watch.llm import LLMError
 PROMPT_CHARS = 12_000
 SYSTEM = """You summarise one vendor release-notes entry for someone who uses the product. The summary is the main
 text of a chat card; the entry itself sits behind a "Show full notes" button.
-Reply with JSON: {"summary": "<two or three short sentences, at most 60 words>"}.
+Reply with JSON: {"summary": "<two or three short sentences, at most 60 words>", "substantive": true or false}.
+substantive is false only when the entry names no specific change at all: an empty entry, a bare date or heading,
+or only "maintenance improvements", "bug fixes and performance improvements" with nothing named.
 Say what changes for the product's users, most important first: new or changed capabilities, licensing, pricing or
 usage terms, supported platforms and requirements, deprecations and end of support, security fixes, and only then
 notable bug fixes. Name the features. Don't repeat the vendor, product, heading or version number, and don't list
@@ -15,14 +17,21 @@ section names ("adds new features and bug fixes"): say what they are.
 Use only facts in the entry. No marketing language."""
 
 
-async def summarize(llm, vendor: str, heading: str, text: str) -> str | None:
+async def summarize_entry(llm, vendor: str, heading: str, text: str) -> tuple[str | None, bool]:
+    """(summary, whether the entry names any change); an unclear answer counts as having content."""
     user = json.dumps({"vendor": vendor, "heading": heading, "entry": text[:PROMPT_CHARS]}, ensure_ascii=False)
     try:
         reply = await llm.complete_json(SYSTEM, user, max_output_tokens=1000)
     except LLMError:
-        return None
-    summary = reply.get("summary") if isinstance(reply, dict) else None
-    return summary.strip() if isinstance(summary, str) and summary.strip() else None
+        return None, True
+    reply = reply if isinstance(reply, dict) else {}
+    summary = reply.get("summary")
+    return (summary.strip() if isinstance(summary, str) and summary.strip() else None), \
+        reply.get("substantive") is not False
+
+
+async def summarize(llm, vendor: str, heading: str, text: str) -> str | None:
+    return (await summarize_entry(llm, vendor, heading, text))[0]
 
 
 JUDGE_SYSTEM = """You check one edit to a vendor's release-notes entry before it is sent to people who use the product.
@@ -53,3 +62,31 @@ async def judge_edit(llm, vendor: str, heading: str, diff: str) -> tuple[bool | 
     verdict = reply.get("meaningful") if isinstance(reply, dict) else None
     reason = reply.get("reason") if isinstance(reply, dict) else None
     return (verdict if isinstance(verdict, bool) else None), (reason.strip() if isinstance(reason, str) else "")
+
+
+
+API_PROMPT_CHARS = 60_000  # API changelogs run long; the additions that show a new capability are often at the end
+API_SYSTEM = """You read one entry of a vendor's API changelog (REST, GraphQL or SDK) for people who use the product
+itself, not its API. They don't care about the API changes as such; they want to know whether the entry shows the
+product gained a capability.
+A new capability: the API now covers something the product could not do before, e.g. a new workload, data source
+or object type protected, a new kind of restore, recovery or report, a new integration, cloud, region or platform,
+a new security or compliance feature.
+Not a new capability: renamed, retyped, deprecated or removed fields, types and endpoints, new optional fields or
+filters on things that already existed, pagination, error codes, documentation, SDK or client-library releases,
+maintenance, bug fixes.
+Reply with JSON: {"capability": true or false, "summary": "<when true: one to three short sentences, at most 60
+words, naming the new capabilities in product terms, without API names; when false: one short sentence saying what
+the entry changes>"}."""
+
+
+async def judge_api(llm, vendor: str, heading: str, text: str) -> tuple[bool | None, str]:
+    """(shows a new product capability?, the capability in product terms or what changed); None when unclear."""
+    user = json.dumps({"vendor": vendor, "heading": heading, "entry": text[:API_PROMPT_CHARS]}, ensure_ascii=False)
+    try:
+        reply = await llm.complete_json(API_SYSTEM, user, max_output_tokens=1000)
+    except LLMError:
+        return None, ""
+    verdict = reply.get("capability") if isinstance(reply, dict) else None
+    summary = reply.get("summary") if isinstance(reply, dict) else None
+    return (verdict if isinstance(verdict, bool) else None), (summary.strip() if isinstance(summary, str) else "")

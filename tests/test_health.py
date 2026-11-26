@@ -173,3 +173,16 @@ def test_weekly_login_in_progress(session_factory):
         s.commit()
         h = compute_health(s, NOW)
     assert h.weekly_login == "Weekly login: visit in progress (started Wed 04 Nov 07:55 UTC)"
+
+
+def test_vendors_in_a_tier_without_a_known_name_are_listed(session_factory):
+    import uuid
+
+    from release_watch.models import CatalogVendor
+    from release_watch.tiers import TIERS
+    now = datetime(2026, 11, 26, 11, tzinfo=UTC)
+    with session_factory() as s:
+        s.add(CatalogVendor(de_id=uuid.uuid4(), name="Known", tier_id=uuid.UUID(next(iter(TIERS))), synced_at=now))
+        s.add(CatalogVendor(de_id=uuid.uuid4(), name="Newco", tier_id=uuid.UUID(int=7), synced_at=now))
+        s.commit()
+        assert compute_health(s, now).unknown_tiers == [f"Newco (tier {uuid.UUID(int=7)})"]

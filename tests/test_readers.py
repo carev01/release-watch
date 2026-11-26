@@ -140,3 +140,26 @@ async def test_prerelease_entries_are_dropped():
     async with fast_fetcher() as f:
         r = await read_source(src("https://g.com/r.atom", kind="feed"), f)
     assert [e.heading for e in r.entries] == ["v1.18.4"]
+
+
+def test_pdf_text_drops_page_footers_and_the_third_party_appendix(monkeypatch):
+    from release_watch.watch import readers
+
+    class Page:
+        def __init__(self, text):
+            self.text = text
+
+        def extract_text(self):
+            return self.text
+
+    pages = [Page("Contents\nl New features\nl Third-party contributions\nRelease Notes 1"),
+             Page("New features\nIntune device configuration backup.\nRelease Notes 2"),
+             Page("Known issues\nRestores of large tenants are slow.\nRelease Notes 3"),
+             Page("Third-party contributions\nThis product contains the third-party components listed below.\n"
+                  "Azure.Core 1.59.0 MIT\nRelease Notes 4"),
+             Page("Newtonsoft.Json 13.0.4 MIT\nRelease Notes 5")]
+    monkeypatch.setattr(readers, "PdfReader", lambda _: type("R", (), {"pages": pages})())
+    text = readers.pdf_text(b"%PDF")
+    assert "Intune device configuration backup." in text and "Restores of large tenants are slow." in text
+    assert "l Third-party contributions" in text  # the contents line stays; only the appendix goes
+    assert "Release Notes" not in text and "Azure.Core" not in text and "Newtonsoft" not in text

@@ -76,19 +76,22 @@ def html_page(url, body, status=200, outcome="ok", reason="", content_type="text
 
 
 class SummaryLLM:
-    """Summaries reply `reply`; the edit judge (its prompt asks for "meaningful") replies `verdict`."""
-    def __init__(self, reply=None, error=None, verdict=None):
+    """Summaries reply `reply`; the edit judge (its prompt asks for "meaningful") replies `verdict`; the API
+    changelog check (its prompt asks for "capability") replies `api`."""
+    def __init__(self, reply=None, error=None, verdict=None, api=None):
         self.reply = {"summary": "Adds X."} if reply is None else reply
         self.verdict = {"meaningful": True, "reason": "Adds a feature."} if verdict is None else verdict
+        self.api = {"capability": True, "summary": "Backs up Y."} if api is None else api
         self.error, self.calls = error, 0
 
     async def complete_json(self, system, user, **kw):
         self.calls += 1
         if self.error:
             raise self.error
-        if isinstance(self.verdict, Exception) and '"meaningful"' in system:
-            raise self.verdict
-        return self.verdict if '"meaningful"' in system else self.reply
+        answer = self.verdict if '"meaningful"' in system else self.api if '"capability"' in system else self.reply
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
 
 
 def tiny_pdf(lines: list[str]) -> bytes:

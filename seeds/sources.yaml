@@ -1568,3 +1568,8 @@ source_config:
   kind: entry_page
 - url: "https://support-public.cfm.quest.com/82551_Security_Management_Platform_GlobalSettings_ReleaseNotes.pdf"
   kind: entry_page
+# --- API changelogs (owner, chat 2026-11-26): sent only when an entry shows a new product capability ---
+- url: https://developer.rubrik.com/Rubrik-Security-Cloud-API/API-Reference/Changelog/
+  api_entries: '.'
+- url: https://docs.slide.tech/releases/
+  api_entries: '^API\b'

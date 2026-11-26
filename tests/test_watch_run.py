@@ -665,3 +665,45 @@ async def test_latest_release_page_edit_is_judged_too(session_factory):
     new, edit = events(session_factory)
     assert (edit.kind, edit.status, edit.reason, edit.summary) == ("edited", "dismissed", "judged_noise",
                                                                    "Judged noise: Typo fixed.")
+
+
+API_NEW = "<h2>API v1.51.0</h2><ul><li>New endpoint GET /v1/backup/m365.</li></ul>"
+CONSOLE_NEW = "<h2>Console v1.102.0</h2><ul><li>Dark mode.</li></ul>"
+
+
+async def test_api_changelog_entry_is_sent_only_for_a_new_capability(session_factory):
+    add_source(session_factory, api_entries=r"^API\b")
+    llm = SummaryLLM(api={"capability": True, "summary": "Microsoft 365 backups can now be listed."})
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, DAY1)}), llm=llm)
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, API_NEW + CONSOLE_NEW + DAY1)}), llm=llm)
+    by_heading = {ev.heading: (ev.status, ev.summary) for ev in events(session_factory)}
+    assert by_heading == {"API v1.51.0": ("queued", "Microsoft 365 backups can now be listed."),
+                          "Console v1.102.0": ("queued", "Adds X.")}  # not an API entry: summarised as usual
+
+
+async def test_api_changelog_entry_without_a_new_capability_is_logged_not_sent(session_factory):
+    add_source(session_factory, api_entries=".")
+    llm = SummaryLLM(api={"capability": False, "summary": "Removes deprecated types."})
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, DAY1)}), llm=llm)
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, API_NEW + DAY1)}), llm=llm)
+    [ev] = events(session_factory)
+    assert (ev.status, ev.reason, ev.summary) == ("dismissed", "api_no_capability",
+                                                  "No new capability: Removes deprecated types.")
+
+
+async def test_api_changelog_entry_the_model_cannot_judge_waits_for_a_look(session_factory):
+    add_source(session_factory, api_entries=".")
+    llm = SummaryLLM(api=LLMError("down"))
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, DAY1)}), llm=llm)
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, API_NEW + DAY1)}), llm=llm)
+    [ev] = events(session_factory)
+    assert (ev.status, ev.reason) == ("needs_look", "judge_failed")
+
+
+async def test_new_entry_with_nothing_in_it_is_logged_not_sent(session_factory):
+    add_source(session_factory)
+    llm = SummaryLLM(reply={"summary": "No release details are provided.", "substantive": False})
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, DAY1)}), llm=llm)
+    await run(session_factory, ScriptedFetcher({URL: html_page(URL, DAY2)}), llm=llm)
+    [ev] = events(session_factory)
+    assert (ev.status, ev.reason) == ("dismissed", "no_content")

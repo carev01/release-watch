@@ -4,7 +4,6 @@ import re
 from datetime import datetime
 
 PART_LIMIT = 20_000
-MAX_PARTS = 3
 PREVIEW_LIMIT = 1_500  # a longer entry shows this much; the rest opens with "Show full notes"
 LIST_CAP = 15
 _HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
@@ -78,25 +77,17 @@ def _folded(text: str, *, whole: bool = False, label: str = "Show full notes") -
 
 
 def entry_cards(event, vendor: str, product: str | None, web_base_url: str) -> list[dict]:
+    """One card per entry. The summary is its main text; the vendor's words wait behind the toggle, and an entry
+    too long for one card shows its first part there with a link to the whole entry."""
     edited = event.kind == "edited"
     title = _unmarked(f"{'Edited · ' if edited else ''}{vendor}{f' · {product}' if product else ''}: {event.heading}")
     text = _unmarked(event.diff or "" if edited else card_markdown(event.body or ""))
     parts = split_parts(text)
-    # The summary is the card's main text; the vendor's words wait behind the toggle for whoever wants them.
     summary = [_text(event.summary)] if event.summary else []
-    fold = {"whole": bool(summary), "label": "Show what changed" if edited else "Show full notes"}
-
-    if len(parts) > MAX_PARTS:
-        blocks, actions = _folded(parts[0], **fold)
-        return [_card([_text(f"**{title} (1 of {len(parts)} parts)**"), *summary, *blocks,
-                       _text(f"Full entry: {web_base_url}/events/{event.id}")], event.url, actions)]
-    cards = []
-    for i, part in enumerate(parts, 1):
-        suffix = f" ({i}/{len(parts)})" if len(parts) > 1 else ""
-        blocks, actions = _folded(part, **fold)
-        cards.append(_card([_text(f"**{title}{suffix}**"), *(summary if i == 1 else []), *blocks],
-                           event.url, actions))
-    return cards
+    blocks, actions = _folded(parts[0], whole=bool(summary),
+                              label="Show what changed" if edited else "Show full notes")
+    more = [_text(f"Full entry: {web_base_url}/events/{event.id}")] if len(parts) > 1 else []
+    return [_card([_text(f"**{title}**"), *summary, *blocks, *more], event.url, actions)]
 
 
 def _capped(items: list[str]) -> list[str]:
@@ -129,6 +120,9 @@ def summary_card(health, versions: list[tuple[str, list[str]]], counts: dict[str
     if health.weekly_login:
         h.append(health.weekly_login)
     h.append("Public sources only: " + ", ".join(health.public_only))
+    if health.unknown_tiers:
+        h.append("Vendors in a tier Release Watch doesn't know (sent with no tier):\n"
+                 + "\n".join(f"- {i}" for i in _capped(health.unknown_tiers)))
     if health.needs_look:
         h.append(f"{health.needs_look} in needs a look ({health.needs_look_stale} older than 3 days)")
     if health.sync_error:
@@ -141,12 +135,12 @@ def summary_card(health, versions: list[tuple[str, list[str]]], counts: dict[str
     return _card(blocks)
 
 
-def envelope(card: dict, category: str | None = None) -> dict:
-    """The webhook body. category ("health", "alert", "new", "edited") lets the owner's flow route the card:
-    triggerBody()?['category'] in Power Automate."""
+def envelope(card: dict, category: str | None = None, *, tier: int | None = None, vendor: str | None = None) -> dict:
+    """The webhook body. category ("health", "alert", "new", "edited"), tier (DocExtractor's vendor tier: 1, 2, 3,
+    or null) and vendor let the owner's flow route the card: triggerBody()?['category'] in Power Automate."""
     env = {"type": "message",
            "attachments": [{"contentType": "application/vnd.microsoft.card.adaptive", "content": card}]}
-    return {**env, "category": category} if category else env
+    return {**env, "category": category, "tier": tier, "vendor": vendor} if category else env
 
 
 def text_card(text: str) -> dict:

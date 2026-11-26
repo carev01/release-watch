@@ -74,13 +74,43 @@ def is_prerelease(text: str) -> bool:
     return bool(PRE_RELEASE.search(text))
 
 
+# The appendix that ends many vendor PDFs: third-party components and their licences change every release and
+# say nothing about the product. A contents line ("l Third-party contributions", "... 20") doesn't match.
+_APPENDIX = re.compile(r"(?i)^\s*(?:list of )?third[- ]party (?:contributions|components|software|licen[cs]es?)\s*$")
+_RUNNING_MIN_PAGES = 3
+
+
+def _running_lines(pages: list[list[str]]) -> set[str]:
+    """Page headers and footers ("Release Notes 11"): short lines on most pages, the same but for their numbers."""
+    if len(pages) < _RUNNING_MIN_PAGES:
+        return set()
+    seen: dict[str, int] = {}
+    for lines in pages:
+        for key in {re.sub(r"\d+", "#", ln.strip()) for ln in lines if ln.strip() and len(ln.strip()) <= 80}:
+            seen[key] = seen.get(key, 0) + 1
+    return {k for k, n in seen.items() if n >= _RUNNING_MIN_PAGES and n * 2 >= len(pages)}
+
+
 def pdf_text(content: bytes) -> str:
+    """The PDF's text without page headers and footers or the third-party appendix, so a new release's diff shows
+    the release, not renumbered pages and library licences."""
     try:
         reader = PdfReader(io.BytesIO(content))
-        pages = [(page.extract_text() or "").strip() for page in reader.pages]
+        pages = [(page.extract_text() or "").strip().splitlines() for page in reader.pages]
     except Exception:  # pypdf raises many kinds of errors on damaged or encrypted files
         return ""
-    return "\n\n".join(p for p in pages if p)
+    running = _running_lines(pages)
+    out: list[str] = []
+    for i, lines in enumerate(pages):
+        kept = [ln for ln in lines if re.sub(r"\d+", "#", ln.strip()) not in running]
+        cut = next((j for j, ln in enumerate(kept) if i > 0 and _APPENDIX.match(ln)), None)
+        if cut is not None:
+            if text := "\n".join(kept[:cut]).strip():
+                out.append(text)
+            break
+        if text := "\n".join(kept).strip():
+            out.append(text)
+    return "\n\n".join(out)
 
 
 async def read_source(source: WatchedSource, fetcher) -> ReadResult:

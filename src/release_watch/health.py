@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
 
-from release_watch.models import EntryEvent, FetchAttempt, JobRun, WatchedSource
+from release_watch.models import CatalogVendor, EntryEvent, FetchAttempt, JobRun, WatchedSource
+from release_watch.tiers import tier_of
 
 PUBLIC_ONLY = ["Rubrik", "Cohesity"]
 BROKEN_STREAK = 3
@@ -29,6 +30,7 @@ class Health:
     sync_error: str | None = None
     last_watch_ok: datetime | None = None
     stale_jobs: list[str] = field(default_factory=list)
+    unknown_tiers: list[str] = field(default_factory=list)  # "Vendor (tier <id>)": cards go out with no tier
 
 
 def _label(src: WatchedSource, detail: str | None = None) -> str:
@@ -116,4 +118,7 @@ def compute_health(s, now: datetime) -> Health:
     last_sync = s.scalar(select(JobRun).where(JobRun.job == "sync").order_by(JobRun.started_at.desc()).limit(1))
     if last_sync is not None and last_sync.status == "failed":
         h.sync_error = last_sync.error
+    h.unknown_tiers = [f"{v.name} (tier {v.tier_id})" for v in s.scalars(
+        select(CatalogVendor).where(CatalogVendor.active, CatalogVendor.tier_id.is_not(None)).order_by(CatalogVendor.name))
+        if tier_of(v.tier_id) is None]
     return h

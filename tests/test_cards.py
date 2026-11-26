@@ -46,21 +46,13 @@ def event(body, kind="new", diff=None):
                       diff=diff, summary="Adds X.", url="https://v.com/rn", status="queued")
 
 
-def test_entry_cards_numbered_parts():
-    ev = event("\n\n".join(["word " * 1800] * 5))  # ~45 KB
-    cards = entry_cards(ev, "Vendor", "Product", WEB)
-    assert len(cards) == 3
-    assert [c["body"][0]["text"] for c in cards] == [f"**Vendor · Product: October 2026 ({i}/3)**" for i in (1, 2, 3)]
-    assert "Adds X." in card_text(cards[0]) and "Adds X." not in card_text(cards[1])
-    assert cards[0]["actions"][-1]["url"] == "https://v.com/rn"
-
-
-def test_entry_cards_over_three_parts_link_to_web():
+def test_a_long_entry_is_one_card_linking_to_the_full_entry():
     ev = event("\n\n".join(["word " * 1800] * 8))  # ~72 KB
-    cards = entry_cards(ev, "Vendor", None, WEB)
-    assert len(cards) == 1
-    assert f"Full entry: {WEB}/events/{ev.id}" in card_text(cards[0])
-    assert cards[0]["body"][0]["text"] == "**Vendor: October 2026 (1 of 4 parts)**"
+    [card] = entry_cards(ev, "Vendor", "Product", WEB)
+    assert card["body"][0]["text"] == "**Vendor · Product: October 2026**"
+    assert f"Full entry: {WEB}/events/{ev.id}" in card_text(card)
+    assert len(json.dumps(card)) < 25_000  # under Teams' card size limit
+    assert card["actions"][-1]["url"] == "https://v.com/rn"
 
 
 def hidden(card):
@@ -98,13 +90,6 @@ def test_entry_card_leads_with_the_summary_and_folds_all_the_vendor_text():
     assert rest == [fold] and "* One fix." in fold["items"][0]["text"]
     toggle = card["actions"][0]
     assert toggle == {"type": "Action.ToggleVisibility", "title": "Show full notes", "targetElements": [fold["id"]]}
-
-
-def test_multi_part_entry_folds_every_part():
-    ev = event("\n\n".join(["word " * 1800] * 5))  # ~45 KB: three cards
-    for card in entry_cards(ev, "Vendor", "Product", WEB):
-        assert len(hidden(card)) == 1 and all(b.get("type") == "Container" or "word word" not in b.get("text", "")
-                                              for b in card["body"])
 
 
 def test_edited_card_shows_the_readable_diff_as_text():
@@ -153,11 +138,19 @@ def test_envelope_shape():
     json.dumps(env)
 
 
-def test_envelope_names_its_category_for_the_flow_to_route_on():
-    assert envelope({"type": "AdaptiveCard"}, "health")["category"] == "health"
+def test_envelope_names_its_category_tier_and_vendor_for_the_flow_to_route_on():
+    env = envelope({"type": "AdaptiveCard"}, "new", tier=1, vendor="Rubrik")
+    assert (env["category"], env["tier"], env["vendor"]) == ("new", 1, "Rubrik")
+    env = envelope({"type": "AdaptiveCard"}, "health")
+    assert (env["category"], env["tier"], env["vendor"]) == ("health", None, None)
 
 
 def test_summary_card_drops_heading_anchor_marks():
     card = summary_card(Health(checked=1, total=1), [("Slide · Slide", ["Version **41** is available: [Slide docs¶](https://s)"])],
                         {}, NOW)
     assert "[Slide docs](https://s)" in card_text(card) and "¶" not in card_text(card)
+
+
+def test_summary_card_names_vendors_whose_tier_is_unknown():
+    card = summary_card(Health(checked=1, total=1, unknown_tiers=["Newco (tier 1234)"]), [], {}, NOW)
+    assert "Vendors in a tier Release Watch doesn't know (sent with no tier):\n- Newco (tier 1234)" in card_text(card)

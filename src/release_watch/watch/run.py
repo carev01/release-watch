@@ -1,6 +1,7 @@
 """The daily watch (spec 7.2): read, compare, confirm, gate, store, summarise."""
 
 import asyncio
+import re
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -18,7 +19,7 @@ from release_watch.watch.rules import newer_than_tracked, same_version_line, ver
 from release_watch.watch.split import DATE_RE, heading_version, own_release
 from release_watch.watch.split import Entry as SplitEntry
 from release_watch.watch.successor import on_successor_baseline, propose_successors
-from release_watch.watch.summary import judge_edit, summarize
+from release_watch.watch.summary import judge_api, judge_edit, summarize_entry
 
 MAX_PARALLEL = 8
 OK_OUTCOMES = ("baseline", "same", "changed")
@@ -290,11 +291,18 @@ async def _settle_confirmed(sf, fetcher, llm, p: _Pending, second: ReadResult, a
     for ev in events:
         if ev.kind == "edited" and ev.status in ("queued", "needs_look") and (ev.heading, ev.body) in reworded:
             ev.status, ev.reason = "dismissed", "site_reformat"
+    api = re.compile(src.api_entries) if src.api_entries else None
     for ev in events:
+        if ev.kind in ("new", "edited") and api and api.search(ev.heading or ""):
+            if ev.status == "queued":
+                await _judge_api(llm, src, ev)
+            continue
         if ev.kind == "edited" and ev.status == "queued":
             await _judge(llm, src, ev)
         if ev.kind == "new" and ev.status != "dismissed":
-            ev.summary = await summarize(llm, src.vendor_name, ev.heading, ev.body or "")
+            ev.summary, substantive = await summarize_entry(llm, src.vendor_name, ev.heading, ev.body or "")
+            if not substantive and ev.status == "queued":
+                ev.status, ev.reason = "dismissed", "no_content"
 
     with sf() as s:
         row = s.get(WatchedSource, src.id)
@@ -411,6 +419,19 @@ async def _judge(llm, src, ev: EntryEvent) -> None:
     elif meaningful is False:
         ev.status, ev.reason, ev.summary = "dismissed", "judged_noise", f"Judged noise: {reason}" if reason else None
     elif meaningful is None:
+        ev.status, ev.reason = "needs_look", "judge_failed"
+
+
+async def _judge_api(llm, src, ev: EntryEvent) -> None:
+    """An API changelog entry is sent only when it shows the product gained a capability, summarised as that
+    capability; the API's own changes are logged, unsent. No clear answer waits for a look."""
+    capability, summary = await judge_api(llm, src.vendor_name, ev.heading, ev.diff or ev.body or "")
+    if capability is True:
+        ev.summary = summary or None
+    elif capability is False:
+        ev.status, ev.reason = "dismissed", "api_no_capability"
+        ev.summary = f"No new capability: {summary}" if summary else None
+    else:
         ev.status, ev.reason = "needs_look", "judge_failed"
 
 

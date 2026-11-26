@@ -290,3 +290,31 @@ def test_named_product_must_be_the_tracked_product(session_factory):
     summary = preview_digest(session_factory, web_base_url="http://rw", now=NOW)[-1]
     assert any("[IBM Storage Protect Snapshot: What's new for Oracle](https://ibm.com/sps)" in b["text"]
                for b in summary["body"])
+
+
+@respx.mock
+async def test_entry_cards_carry_the_vendor_tier(session_factory):
+    from release_watch.models import CatalogVendor
+    from release_watch.tiers import TIERS
+    tier1 = next(k for k, v in TIERS.items() if v == 1)
+    seed(session_factory, n_new=1)
+    with session_factory() as s:
+        vid = uuid.uuid4()
+        s.add(CatalogVendor(de_id=vid, name="Acme", tier_id=uuid.UUID(tier1), synced_at=NOW))
+        src = s.scalars(select(WatchedSource)).one()
+        src.product_de_id = product(s, "Box", "1.0")
+        s.flush()
+        s.get(CatalogProduct, src.product_de_id).vendor_de_id = vid
+        s.commit()
+    route = respx.post(HOOK).mock(return_value=httpx.Response(202))
+    await run_digest(session_factory, teams(), web_base_url="http://rw", now=NOW)
+    bodies = [json.loads(c.request.content) for c in route.calls]
+    assert [(b["category"], b["tier"], b["vendor"]) for b in bodies] == [("health", None, None), ("new", 1, "Acme")]
+
+
+@respx.mock
+async def test_a_vendor_without_a_known_tier_is_sent_with_none(session_factory):
+    seed(session_factory, n_new=1)
+    route = respx.post(HOOK).mock(return_value=httpx.Response(202))
+    await run_digest(session_factory, teams(), web_base_url="http://rw", now=NOW)
+    assert json.loads(route.calls[-1].request.content)["tier"] is None
