@@ -1209,7 +1209,7 @@ source_config:
   selector: "article"
   split_rule: {"whole": true, "key": "about netbackup 11.2.0.1"}
 # 1 entries, newest "it analytics 11.8 introduction"; chapter ToC page as one entry; no pin possible (doc IDs in URL change per version)
-- url: "https://docs.cohesity.com/docs/netbackupitanalytics/11.8/149597085-171083363-0"
+- url: "https://docs.cohesity.com/docs/netbackupitanalytics/11.9/149597085-173031069-0"  # followed from 11.8 by the watch
   selector: "article"
   split_rule: {"whole": true, "key": "it analytics 11.8 introduction"}
 # 1 entries, newest "resiliency platform 10.3 release overview"; chapter ToC page as one entry; no pin possible (doc IDs in URL change per version)
