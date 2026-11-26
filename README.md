@@ -64,8 +64,8 @@ The daily digest (11:00 UTC) and the immediate alerts are posted to a Teams grou
 
 1. In Power Automate, create an **instant cloud flow** with the trigger **"When a Teams webhook request is received"** (Teams connector). Set *Who can trigger the flow* to **Anyone**.
 2. Add the action **"Post card in a chat or channel"**. Post as **Flow bot**, post in **Group chat**, and pick the chat.
-3. For **Adaptive Card**, use the expression `triggerBody()?['attachments']?[0]?['content']`. Release Watch sends the Teams message envelope `{"type":"message","attachments":[{"contentType":"application/vnd.microsoft.card.adaptive","content":{…}}],"category":"…"}`, one card per request.
-   To send some cards elsewhere, add a **Switch** (or Condition) on `triggerBody()?['category']` before the post. Its values: `health` (the daily summary card with health, new versions and counts, and the "last successful watch" warning), `alert` (a job that failed, a weekly login that failed), `new` and `edited` (one card per release-notes entry).
+3. For **Adaptive Card**, use the expression `triggerBody()?['attachments']?[0]?['content']`. Release Watch sends the Teams message envelope `{"type":"message","attachments":[{"contentType":"application/vnd.microsoft.card.adaptive","content":{…}}],"category":"…","tier":1,"vendor":"…"}`, one card per request.
+   To send some cards elsewhere, add a **Switch** (or Condition) before the post on `triggerBody()?['category']`: `health` (the daily summary card with health, new versions and counts, and the "last successful watch" warning), `alert` (a job that failed, a weekly login that failed), `new` and `edited` (one card per release-notes entry). Entry cards also carry `tier` (the vendor's DocExtractor tier: 1, 2 or 3) and `vendor`; health and alert cards send both as `null`. Tier IDs are mapped to numbers in `src/release_watch/tiers.py`, because DocExtractor's read-only key can't read `/tiers`; a vendor in an unmapped tier is sent with `tier: null` and listed on the health card.
 4. Save, copy the trigger's HTTP URL, and add it to the Secret. The URL carries a signature, so treat it as a password:
 
 ```bash
